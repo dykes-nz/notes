@@ -519,6 +519,23 @@
     fabricCanvas.freeDrawingBrush.color = strokeColor;
     fabricCanvas.freeDrawingBrush.width = strokeWidth;
 
+    // Moved ink rises above stationary eraser punches - a punch blanks
+    // everything below it, so dragging older ink under one would blank
+    // it too. Registered before undo tracking so the restack is part of
+    // the same state change.
+    fabricCanvas.on('object:modified', function(e) {
+      if (isRestoringState || currentTool !== 'select' || !e.target) return;
+      const hasPunches = fabricCanvas.getObjects().some(o => o.isEraser);
+      if (!hasPunches) return;
+      const targets = e.target.type === 'activeSelection'
+        ? e.target.getObjects().slice()
+        : [e.target];
+      targets.forEach(o => {
+        if (!o.isEraser) fabricCanvas.bringToFront(o);
+      });
+      fabricCanvas.requestRenderAll();
+    });
+
     // Track changes for undo (skipped during undo/redo restores)
     fabricCanvas.on('object:added', function() {
       if (isRestoringState) return;
@@ -1214,6 +1231,7 @@
 
       const selected = canvas.getObjects().filter(obj =>
         !obj.excludeFromExport && !obj.isEraser && obj.selectable !== false &&
+        !isFullyPunchedOut(obj, canvas) &&
         objectTouchesLasso(obj, points)
       );
 
@@ -1269,6 +1287,26 @@
     const d3 = cross(a, b, c);
     const d4 = cross(a, b, d);
     return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  }
+
+  // An object whose bounds are entirely inside a later (higher-stacked)
+  // eraser punch is invisible - the lasso should not pick up such ghosts
+  function isFullyPunchedOut(obj, canvas) {
+    const objs = canvas.getObjects();
+    const idx = objs.indexOf(obj);
+    const r = obj.getBoundingRect(true, true);
+
+    for (let i = idx + 1; i < objs.length; i++) {
+      const p = objs[i];
+      if (!p.isEraser) continue;
+      const e = p.getBoundingRect(true, true);
+      if (e.left <= r.left && e.top <= r.top &&
+          e.left + e.width >= r.left + r.width &&
+          e.top + e.height >= r.top + r.height) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Object counts as lassoed if its bounding box is inside the lasso or
