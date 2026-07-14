@@ -259,7 +259,10 @@
     // Restore state if exists
     if (canvasStates[pageNum]) {
       await new Promise(resolve => {
-        fabricCanvas.loadFromJSON(canvasStates[pageNum], resolve);
+        fabricCanvas.loadFromJSON(canvasStates[pageNum], () => {
+          markEraserPaths(fabricCanvas);
+          resolve();
+        });
       });
     }
 
@@ -350,7 +353,10 @@
         // Restore state if exists
         if (canvasStates[pageNum]) {
           await new Promise(resolve => {
-            fabricCanvas.loadFromJSON(canvasStates[pageNum], resolve);
+            fabricCanvas.loadFromJSON(canvasStates[pageNum], () => {
+              markEraserPaths(fabricCanvas);
+              resolve();
+            });
           });
         }
 
@@ -426,7 +432,9 @@
         e.path.set({
           globalCompositeOperation: 'destination-out',
           isEraser: true,
-          stroke: '#000000'
+          stroke: '#000000',
+          selectable: false,
+          evented: false // hole punches must not be hit-testable by other tools
         });
         fabricCanvas.renderAll();
       }
@@ -573,6 +581,8 @@
         canvas.freeDrawingBrush.color = 'rgba(255,255,255,0.01)';
         canvas.freeDrawingBrush.width = strokeWidth * 3;
         canvas.defaultCursor = 'cell';
+        // Erase pixels live while drawing (the path on lift makes it permanent)
+        attachPrecisionEraserHandlers(canvas);
         canvas.forEachObject(obj => { obj.selectable = false; });
         break;
 
@@ -675,7 +685,9 @@
   function attachEraserHandlers(canvas) {
     const eraseAt = (e) => {
       const target = e.target || canvas.findTarget(e.e, true);
-      if (target && !target.excludeFromExport) {
+      // Never remove eraser hole-punch paths - deleting one would make
+      // previously erased ink reappear
+      if (target && !target.excludeFromExport && !target.isEraser) {
         canvas.remove(target);
         canvas.renderAll();
       }
@@ -697,8 +709,61 @@
 
   // Safety: stop erasing if the pointer is released outside the canvas,
   // otherwise moving the pen afterwards would keep erasing on hover
-  document.addEventListener('pointerup', () => { isErasing = false; });
-  document.addEventListener('touchend', () => { isErasing = false; });
+  document.addEventListener('pointerup', () => { isErasing = false; precisionErasePrev = null; });
+  document.addEventListener('touchend', () => { isErasing = false; precisionErasePrev = null; });
+
+  // Precision eraser: punch pixels out of the rendered page immediately
+  // while the pen is down. The destination-out path added on pen lift
+  // makes the erasure permanent; this just makes it visible live.
+  let precisionErasePrev = null;
+
+  function attachPrecisionEraserHandlers(canvas) {
+    canvas.on('mouse:down', (e) => {
+      const p = canvas.getPointer(e.e);
+      precisionErasePrev = p;
+      punchErase(canvas, p, p);
+    });
+
+    canvas.on('mouse:move', (e) => {
+      if (!precisionErasePrev) return;
+      const p = canvas.getPointer(e.e);
+      punchErase(canvas, precisionErasePrev, p);
+      precisionErasePrev = p;
+    });
+
+    canvas.on('mouse:up', () => {
+      precisionErasePrev = null;
+    });
+  }
+
+  function punchErase(canvas, from, to) {
+    const ctx = canvas.lowerCanvasEl.getContext('2d');
+    const retina = canvas.getRetinaScaling();
+    const vt = canvas.viewportTransform;
+
+    ctx.save();
+    ctx.setTransform(retina, 0, 0, retina, 0, 0);
+    ctx.transform(vt[0], vt[1], vt[2], vt[3], vt[4], vt[5]);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = canvas.freeDrawingBrush ? canvas.freeDrawingBrush.width : strokeWidth * 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Eraser hole-punch paths must never be hit-testable or selectable
+  function markEraserPaths(canvas) {
+    canvas.getObjects().forEach(o => {
+      if (o.isEraser) {
+        o.selectable = false;
+        o.evented = false;
+      }
+    });
+  }
 
   function createTextHandler(canvas) {
     return function(e) {
@@ -800,9 +865,9 @@
     switch (template) {
       case 'dots': {
         const s = Math.round(pxPerMm * 5);
-        const r = Math.max(1.5, pxPerMm * 0.35);
+        const r = Math.max(1, pxPerMm * 0.18);
         return {
-          image: 'radial-gradient(circle, #c3ccd8 ' + r + 'px, transparent ' + r + 'px)',
+          image: 'radial-gradient(circle, #d5dbe4 ' + r + 'px, transparent ' + r + 'px)',
           size: s + 'px ' + s + 'px'
         };
       }
@@ -1796,6 +1861,7 @@
 
       const prevState = stack[stack.length - 1];
       canvas.loadFromJSON(prevState, () => {
+        markEraserPaths(canvas);
         updateUndoRedoButtons();
       });
     } else if (stack && stack.length === 1 && canvas) {
@@ -1815,6 +1881,7 @@
       undoStacks[currentPage].push(nextState);
 
       canvas.loadFromJSON(nextState, () => {
+        markEraserPaths(canvas);
         updateUndoRedoButtons();
       });
     }
