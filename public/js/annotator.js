@@ -1669,6 +1669,22 @@
     }
   };
 
+  window.toggleAudioCollapse = function() {
+    const panel = document.getElementById('audio-panel');
+    const container = document.querySelector('.annotator-container');
+    const miniBtn = document.getElementById('audio-record-btn-mini');
+
+    if (panel) {
+      panel.classList.toggle('collapsed');
+      container?.classList.toggle('audio-panel-collapsed', panel.classList.contains('collapsed'));
+
+      // Show mini record button when collapsed
+      if (miniBtn) {
+        miniBtn.style.display = panel.classList.contains('collapsed') ? 'flex' : 'none';
+      }
+    }
+  };
+
   async function loadTranscript() {
     try {
       const response = await fetch('/note/' + NOTE_ID + '/transcript');
@@ -1757,13 +1773,21 @@
       const recordIcon = document.getElementById('audio-record-icon');
       const statusText = document.getElementById('audio-status-text');
       const durationEl = document.getElementById('audio-duration');
+      const recordBtnMini = document.getElementById('audio-record-btn-mini');
+      const recordIconMini = document.getElementById('audio-record-icon-mini');
+      const durationMiniEl = document.getElementById('audio-duration-mini');
 
       recordBtn?.classList.add('recording');
+      recordBtnMini?.classList.add('recording');
       if (recordIcon) {
         recordIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
       }
+      if (recordIconMini) {
+        recordIconMini.innerHTML = '<rect x="8" y="8" width="8" height="8" rx="1"/>';
+      }
       if (statusText) statusText.textContent = 'Recording...';
       durationEl?.classList.remove('hidden');
+      durationMiniEl?.classList.remove('hidden');
 
       // Update duration display
       recordingInterval = setInterval(updateDuration, 1000);
@@ -1803,22 +1827,35 @@
     const recordBtn = document.getElementById('audio-record-btn');
     const recordIcon = document.getElementById('audio-record-icon');
     const statusText = document.getElementById('audio-status-text');
+    const recordBtnMini = document.getElementById('audio-record-btn-mini');
+    const recordIconMini = document.getElementById('audio-record-icon-mini');
+    const durationMiniEl = document.getElementById('audio-duration-mini');
 
     recordBtn?.classList.remove('recording');
+    recordBtnMini?.classList.remove('recording');
     if (recordIcon) {
       recordIcon.innerHTML = '<circle cx="12" cy="12" r="10"/>';
     }
+    if (recordIconMini) {
+      recordIconMini.innerHTML = '<circle cx="12" cy="12" r="8"/>';
+    }
     if (statusText) statusText.textContent = 'Tap to record';
+    durationMiniEl?.classList.add('hidden');
   }
 
   function updateDuration() {
     const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
     const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
     const secs = (elapsed % 60).toString().padStart(2, '0');
+    const timeStr = mins + ':' + secs;
 
     const durationEl = document.getElementById('audio-duration');
+    const durationMiniEl = document.getElementById('audio-duration-mini');
     if (durationEl) {
-      durationEl.textContent = mins + ':' + secs;
+      durationEl.textContent = timeStr;
+    }
+    if (durationMiniEl) {
+      durationMiniEl.textContent = timeStr;
     }
   }
 
@@ -1858,7 +1895,7 @@
     const summarizeBtn = document.getElementById('summarize-btn');
     if (summarizeBtn) {
       summarizeBtn.disabled = true;
-      summarizeBtn.textContent = 'Summarizing...';
+      summarizeBtn.textContent = 'Summarising...';
     }
 
     try {
@@ -1883,15 +1920,15 @@
           summaryContainer.classList.remove('hidden');
         }
       } else if (result.error) {
-        alert('Summarization failed: ' + result.error);
+        alert('Summarisation failed: ' + result.error);
       }
     } catch (err) {
-      console.error('Summarization failed:', err);
-      alert('Summarization failed: ' + err.message);
+      console.error('Summarisation failed:', err);
+      alert('Summarisation failed: ' + err.message);
     } finally {
       if (summarizeBtn) {
         summarizeBtn.disabled = false;
-        summarizeBtn.textContent = 'Summarize';
+        summarizeBtn.textContent = 'Summarise';
       }
     }
   };
