@@ -81,7 +81,23 @@
       'stars.jpg', 'street-neon.jpg', 'telescope.jpg', 'theme-park.jpg',
       'train-station.jpg', 'windmills.jpg'
     ];
-    var randomBg = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+    // Use the background pre-warmed on the previous visit (already in the
+    // HTTP cache, so it displays instantly), then pick and prefetch the
+    // next one for the following load. First-ever visit falls back to
+    // a random pick.
+    var randomBg = null;
+    try { randomBg = localStorage.getItem('nextBg'); } catch (e) {}
+    if (!randomBg || backgrounds.indexOf(randomBg) === -1) {
+      randomBg = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+    }
+    try {
+      var nextBg = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+      localStorage.setItem('nextBg', nextBg);
+      // Warm the cache for next time, after this page has finished loading
+      window.addEventListener('load', function() {
+        new Image().src = '/backgrounds/' + nextBg;
+      });
+    } catch (e) {}
 
     // Apply the background only once fully decoded - a streaming JPEG
     // paints top-to-bottom, leaving a white band at the bottom

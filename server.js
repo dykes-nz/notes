@@ -41,7 +41,9 @@ app.use(helmet({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Static files
+// Static files (backgrounds cached long-term so the image pre-warmed on
+// the previous visit displays instantly)
+app.use('/backgrounds', express.static(path.join(__dirname, 'public', 'backgrounds'), { maxAge: '30d' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Session configuration
