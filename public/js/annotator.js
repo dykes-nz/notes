@@ -1185,7 +1185,12 @@
     pagesWrapper.addEventListener('pointerdown', e => {
       if (!e.target.classList.contains('upper-canvas')) return;
 
-      if (e.pointerType === 'pen') {
+      // Apple Pencil detection: pointerType 'pen' OR touch with high pressure
+      const isPen = e.pointerType === 'pen' || (e.pointerType === 'touch' && e.pressure > 0 && e.pressure !== 0.5);
+
+      console.log('Pointer down:', e.pointerType, 'pressure:', e.pressure, 'isPen:', isPen);
+
+      if (isPen) {
         setStylusActive(true);
         if (stylusTimeout) {
           clearTimeout(stylusTimeout);
@@ -1202,7 +1207,8 @@
     }, { passive: false });
 
     pagesWrapper.addEventListener('pointerup', e => {
-      if (e.pointerType === 'pen') {
+      const isPen = e.pointerType === 'pen' || (e.pointerType === 'touch' && e.pressure > 0 && e.pressure !== 0.5);
+      if (isPen) {
         stylusTimeout = setTimeout(() => {
           setStylusActive(false);
         }, STYLUS_TIMEOUT_MS);
@@ -1210,7 +1216,8 @@
     });
 
     pagesWrapper.addEventListener('pointercancel', e => {
-      if (e.pointerType === 'pen') {
+      const isPen = e.pointerType === 'pen' || (e.pointerType === 'touch' && e.pressure > 0 && e.pressure !== 0.5);
+      if (isPen) {
         stylusTimeout = setTimeout(() => {
           setStylusActive(false);
         }, STYLUS_TIMEOUT_MS);
