@@ -93,7 +93,18 @@
     transform: scale(1.03);
     transition: transform 0.1s;
   }
-  .overlay-note { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  .overlay-note { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
+  /* Handle owns the gesture: no scrolling while dragging from it */
+  .note-drag-handle { touch-action: none; }
+  /* Floating copy of the card that follows the finger during a drag */
+  .drag-ghost {
+    position: fixed;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.9;
+    transform: scale(1.04) rotate(1deg);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.3);
+  }
 </style>
 
 <div class="mx-auto" style="max-width: calc(100% - 400px); margin: 200px 200px 0 200px;">
@@ -355,8 +366,6 @@
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  var overlayDraggedNoteId = null;
-
   function openFolderOverlay(folderId) {
     var folder = FOLDERS_DATA.find(function(f) { return f.id === folderId; });
     if (!folder) return;
@@ -364,24 +373,81 @@
     document.getElementById('folder-overlay-title').textContent = folder.name;
     var grid = document.getElementById('folder-overlay-grid');
     grid.innerHTML = folder.notes.map(function(n) {
-      return '<div class="overlay-note bg-white rounded-lg p-3 shadow cursor-pointer hover:shadow-md" draggable="true" data-note-id="' + n.id + '">' +
+      return '<div class="overlay-note bg-white rounded-lg p-3 shadow cursor-pointer" data-note-id="' + n.id + '">' +
         '<h4 class="font-semibold text-gray-800 truncate text-sm">' + escapeHtml(n.title || 'Untitled') + '</h4>' +
         '<p class="text-xs text-gray-500 mt-1">' + new Date(n.updated_at).toLocaleDateString() + '</p>' +
         '</div>';
     }).join('');
 
+    // Tap opens the note; drag (pointer-based - HTML5 DnD is unavailable
+    // in iOS web apps) past the panel edge pulls it out of the folder
     grid.querySelectorAll('.overlay-note').forEach(function(el) {
-      el.addEventListener('click', function() {
-        window.location.href = '/note/' + el.dataset.noteId;
+      var start = null;
+      var ghost = null;
+      var draggingOut = false;
+      var suppressNoteClick = false;
+
+      el.addEventListener('pointerdown', function(e) {
+        start = { x: e.clientX, y: e.clientY };
+        if (el.setPointerCapture) {
+          try { el.setPointerCapture(e.pointerId); } catch (err) {}
+        }
       });
-      el.addEventListener('dragstart', function(e) {
-        overlayDraggedNoteId = el.dataset.noteId;
-        el.style.opacity = '0.5';
-        e.dataTransfer.effectAllowed = 'move';
+
+      el.addEventListener('pointermove', function(e) {
+        if (!start) return;
+        if (!draggingOut && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) {
+          draggingOut = true;
+          var rect = el.getBoundingClientRect();
+          ghost = el.cloneNode(true);
+          ghost.classList.add('drag-ghost');
+          ghost.style.left = rect.left + 'px';
+          ghost.style.top = rect.top + 'px';
+          ghost.style.width = rect.width + 'px';
+          document.body.appendChild(ghost);
+          el.style.opacity = '0.4';
+        }
+        if (draggingOut && ghost) {
+          ghost.style.left = (e.clientX - 50) + 'px';
+          ghost.style.top = (e.clientY - 25) + 'px';
+        }
       });
-      el.addEventListener('dragend', function() {
+
+      function finishDrag(e) {
+        if (!start) return;
+        var wasDragging = draggingOut;
+        start = null;
+        draggingOut = false;
+        if (ghost) { ghost.remove(); ghost = null; }
         el.style.opacity = '1';
-        overlayDraggedNoteId = null;
+
+        if (wasDragging) {
+          suppressNoteClick = true;
+          setTimeout(function() { suppressNoteClick = false; }, 300);
+          var panel = document.getElementById('folder-overlay-panel').getBoundingClientRect();
+          var outside = e.clientX < panel.left || e.clientX > panel.right ||
+                        e.clientY < panel.top || e.clientY > panel.bottom;
+          if (outside) {
+            moveNoteToFolder(el.dataset.noteId, null);
+          }
+        }
+      }
+
+      el.addEventListener('pointerup', finishDrag);
+      el.addEventListener('pointercancel', function() {
+        start = null;
+        draggingOut = false;
+        if (ghost) { ghost.remove(); ghost = null; }
+        el.style.opacity = '1';
+      });
+
+      el.addEventListener('click', function(e) {
+        if (suppressNoteClick) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        window.location.href = '/note/' + el.dataset.noteId;
       });
     });
 
@@ -400,23 +466,11 @@
     }
   });
 
-  // Backdrop: tap closes; dropping an overlay note on it pulls the note
-  // out of the folder
+  // Backdrop: tap closes (drag-out is handled by the overlay notes'
+  // own pointer tracking)
   var folderOverlay = document.getElementById('folder-overlay');
   folderOverlay.addEventListener('click', function(e) {
     if (e.target === folderOverlay) closeFolderOverlay();
-  });
-  folderOverlay.addEventListener('dragover', function(e) {
-    if (overlayDraggedNoteId && e.target === folderOverlay) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    }
-  });
-  folderOverlay.addEventListener('drop', function(e) {
-    if (overlayDraggedNoteId && e.target === folderOverlay) {
-      e.preventDefault();
-      moveNoteToFolder(overlayDraggedNoteId, null);
-    }
   });
 
   function moveNoteToFolder(noteId, folderId) {
@@ -545,24 +599,10 @@
     history.replaceState({}, '', '/');
   }
 
-  // Drag and drop for note reordering
-  var draggedCard = null;
-  var dragPlaceholder = null;
-
-  // Dragging starts only from the handle - a long-press elsewhere on the
-  // card is inline rename, not reorder
-  document.addEventListener('pointerdown', function(e) {
-    var handle = e.target.closest('.note-drag-handle');
-    if (handle) {
-      var card = handle.closest('.note-card');
-      if (card) card.draggable = true;
-    }
-  });
-  document.addEventListener('pointerup', function() {
-    document.querySelectorAll('.note-card[draggable="true"]').forEach(function(card) {
-      card.draggable = false;
-    });
-  });
+  // ============= DRAG TO REORDER / COMBINE =============
+  // Custom pointer-based dragging: HTML5 drag-and-drop does not work in
+  // iOS Home Screen web apps. Drag starts from the handle; a ghost card
+  // follows the finger. Centre of another card = combine, edges = reorder.
 
   var combineTarget = null;
 
@@ -580,81 +620,93 @@
     }
   }
 
-  document.querySelectorAll('.note-card').forEach(function(card) {
-    card.addEventListener('dragstart', function(e) {
-      draggedCard = card;
-      card.style.opacity = '0.5';
-      e.dataTransfer.effectAllowed = 'move';
+  var cardDrag = null;
 
-      // Create placeholder
-      dragPlaceholder = document.createElement('div');
-      dragPlaceholder.className = 'note-placeholder bg-blue-100/50 border-2 border-dashed border-blue-300 rounded-xl';
-      dragPlaceholder.style.height = card.offsetHeight + 'px';
-    });
+  document.addEventListener('pointerdown', function(e) {
+    var handle = e.target.closest('.note-drag-handle');
+    if (!handle) return;
+    var card = handle.closest('.note-card');
+    if (!card) return;
+    e.preventDefault();
 
-    card.addEventListener('dragend', function(e) {
-      card.style.opacity = '1';
-      if (dragPlaceholder && dragPlaceholder.parentNode) {
-        dragPlaceholder.parentNode.removeChild(dragPlaceholder);
-      }
+    var rect = card.getBoundingClientRect();
+    var ghost = card.cloneNode(true);
+    ghost.classList.add('drag-ghost');
+    ghost.style.left = rect.left + 'px';
+    ghost.style.top = rect.top + 'px';
+    ghost.style.width = rect.width + 'px';
+    document.body.appendChild(ghost);
+    card.style.opacity = '0.35';
+
+    cardDrag = {
+      card: card,
+      ghost: ghost,
+      dx: e.clientX - rect.left,
+      dy: e.clientY - rect.top,
+      moved: false
+    };
+  });
+
+  document.addEventListener('pointermove', function(e) {
+    if (!cardDrag) return;
+    cardDrag.moved = true;
+    cardDrag.ghost.style.left = (e.clientX - cardDrag.dx) + 'px';
+    cardDrag.ghost.style.top = (e.clientY - cardDrag.dy) + 'px';
+
+    var el = document.elementFromPoint(e.clientX, e.clientY);
+    var target = el && el.closest('.note-card');
+    if (!target || target === cardDrag.card) {
+      clearCombineTarget();
+      return;
+    }
+
+    var draggedIsNote = !!cardDrag.card.dataset.noteId;
+    var rect = target.getBoundingClientRect();
+    var inCentre =
+      e.clientX > rect.left + rect.width * 0.2 &&
+      e.clientX < rect.right - rect.width * 0.2 &&
+      e.clientY > rect.top + rect.height * 0.25 &&
+      e.clientY < rect.bottom - rect.height * 0.25;
+
+    if (draggedIsNote && inCentre) {
+      setCombineTarget(target);
+      return;
+    }
+
+    clearCombineTarget();
+
+    // Reorder: move the (dimmed) card through the grid live
+    var grid = document.getElementById('notes-grid');
+    var cards = Array.from(grid.querySelectorAll('.note-card'));
+    if (cards.indexOf(cardDrag.card) < cards.indexOf(target)) {
+      target.parentNode.insertBefore(cardDrag.card, target.nextSibling);
+    } else {
+      target.parentNode.insertBefore(cardDrag.card, target);
+    }
+  });
+
+  ['pointerup', 'pointercancel'].forEach(function(evt) {
+    document.addEventListener(evt, function() {
+      if (!cardDrag) return;
+      var d = cardDrag;
+      cardDrag = null;
+      d.ghost.remove();
+      d.card.style.opacity = '1';
+
       var target = combineTarget;
       clearCombineTarget();
-      var dragged = draggedCard;
-      draggedCard = null;
-      dragPlaceholder = null;
 
       // Dropped centred on another card: combine (iOS folder behaviour)
-      if (target && dragged && dragged.dataset.noteId) {
+      if (target && d.card.dataset.noteId) {
         if (target.dataset.folderId) {
-          moveNoteToFolder(dragged.dataset.noteId, parseInt(target.dataset.folderId));
+          moveNoteToFolder(d.card.dataset.noteId, parseInt(target.dataset.folderId));
         } else if (target.dataset.noteId) {
-          createFolderFromNotes(parseInt(target.dataset.noteId), parseInt(dragged.dataset.noteId));
+          createFolderFromNotes(parseInt(target.dataset.noteId), parseInt(d.card.dataset.noteId));
         }
         return;
       }
 
-      saveGridOrder();
-    });
-
-    card.addEventListener('dragover', function(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-
-      if (!draggedCard || draggedCard === card) return;
-
-      // Hovering a note over the centre of another note or a folder tile
-      // means combine/move-in; edges mean reorder
-      var draggedIsNote = !!draggedCard.dataset.noteId;
-      var rect = card.getBoundingClientRect();
-      var inCentre =
-        e.clientX > rect.left + rect.width * 0.2 &&
-        e.clientX < rect.right - rect.width * 0.2 &&
-        e.clientY > rect.top + rect.height * 0.25 &&
-        e.clientY < rect.bottom - rect.height * 0.25;
-
-      if (draggedIsNote && inCentre) {
-        setCombineTarget(card);
-        return;
-      }
-
-      clearCombineTarget();
-
-      var grid = document.getElementById('notes-grid');
-      var cards = Array.from(grid.querySelectorAll('.note-card'));
-      var draggedIndex = cards.indexOf(draggedCard);
-      var targetIndex = cards.indexOf(card);
-
-      if (draggedIndex < targetIndex) {
-        card.parentNode.insertBefore(dragPlaceholder, card.nextSibling);
-        card.parentNode.insertBefore(draggedCard, card.nextSibling);
-      } else {
-        card.parentNode.insertBefore(dragPlaceholder, card);
-        card.parentNode.insertBefore(draggedCard, card);
-      }
-    });
-
-    card.addEventListener('dragleave', function() {
-      if (combineTarget === card) clearCombineTarget();
+      if (d.moved) saveGridOrder();
     });
   });
 
