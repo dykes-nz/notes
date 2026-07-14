@@ -822,18 +822,9 @@
     document.querySelectorAll('#bg-dropdown .bg-option').forEach(o => {
       o.classList.toggle('active', o.dataset.bg === template);
     });
-    closeBgDropdown();
+    closeAllDropdowns();
     saveState();
   };
-
-  window.toggleBgDropdown = function(e) {
-    if (e) e.stopPropagation();
-    document.getElementById('bg-dropdown')?.classList.toggle('open');
-  };
-
-  function closeBgDropdown() {
-    document.getElementById('bg-dropdown')?.classList.remove('open');
-  }
 
   // ============= INSERT SPACE TOOL =============
 
@@ -1985,11 +1976,10 @@
     }
   }
 
-  // Close dropdowns when clicking outside
+  // Close save dropdown when clicking outside
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.tool-wrapper')) {
       closeSaveDropdown();
-      closeBgDropdown();
     }
   });
 
