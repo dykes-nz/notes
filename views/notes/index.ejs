@@ -92,6 +92,9 @@
   .overlay-note { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
   /* Handle owns the gesture: no scrolling while dragging from it */
   .note-drag-handle { touch-action: none; }
+  /* Home grid fades away while a folder is expanded (iOS behaviour) */
+  #notes-grid { transition: opacity 0.25s ease; }
+  #notes-grid.grid-faded { opacity: 0; pointer-events: none; }
   /* Floating copy of the card that follows the finger during a drag */
   .drag-ghost {
     position: fixed;
@@ -373,28 +376,46 @@
     var folder = FOLDERS_DATA.find(function(f) { return f.id === folderId; });
     if (!folder) return;
 
-    // Notes inside the expanded folder are real note pills: tap opens,
-    // long-press renames + shows the trash, handle-drag pulls them out
+    // Notes inside the expanded folder render exactly like standalone
+    // note cards: tap opens, long-press renames + shows the trash,
+    // handle-drag past the panel edge pulls them out
+    var gripSvg = '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">' +
+      '<circle cx="9" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>' +
+      '<circle cx="15" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="15" cy="18" r="2"/>' +
+      '</svg>';
+    var trashSvg = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+      '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>' +
+      '</svg>';
+
     var grid = document.getElementById('folder-overlay-grid');
     grid.innerHTML = folder.notes.map(function(n) {
-      return '<div class="note-card bg-white/70 rounded-xl border border-gray-200 p-4 relative group" data-note-id="' + n.id + '">' +
-        '<div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300" title="Drag out of folder">' +
-          '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">' +
-            '<circle cx="9" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>' +
-            '<circle cx="15" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="15" cy="18" r="2"/>' +
-          '</svg>' +
-        '</div>' +
+      var safeTitle = escapeHtml(n.title || 'Untitled');
+      return '<div class="note-card bg-white/30 backdrop-blur-sm rounded-xl border border-gray-200 p-4 relative group" data-note-id="' + n.id + '">' +
+        '<div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder">' + gripSvg + '</div>' +
         '<a href="/note/' + n.id + '" class="block pl-6">' +
-          '<h3 class="font-semibold text-gray-800 truncate" style="font-family: \\'Space Grotesk\\', sans-serif; font-size: 1.1rem;">' + escapeHtml(n.title || 'Untitled') + '</h3>' +
-          '<p class="text-sm text-gray-500">' + new Date(n.updated_at).toLocaleDateString() + '</p>' +
+          '<h3 class="font-semibold text-gray-800 mb-2 truncate pr-8" style="font-family: \\'Space Grotesk\\', sans-serif; font-size: 1.25rem;">' + safeTitle + '</h3>' +
+          '<p class="text-sm text-gray-500">Updated ' + new Date(n.updated_at).toLocaleDateString() + '</p>' +
         '</a>' +
+        '<button class="note-delete-btn absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" title="Delete note" data-note-id="' + n.id + '" data-title="' + safeTitle + '">' + trashSvg + '</button>' +
         '</div>';
     }).join('');
+
+    // Desktop hover delete inside the panel
+    grid.querySelectorAll('.note-delete-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        confirmDeleteNote(parseInt(btn.dataset.noteId), btn.dataset.title);
+      });
+    });
 
     var overlay = document.getElementById('folder-overlay');
     var panel = document.getElementById('folder-overlay-panel');
     openedFromTile = tileEl || null;
     overlay.classList.remove('hidden');
+
+    // Hide the rest of the home screen while the folder is open
+    document.getElementById('notes-grid').classList.add('grid-faded');
 
     // Slide-and-expand from the tile's position (FLIP)
     if (tileEl) {
@@ -418,6 +439,9 @@
   function closeFolderOverlay() {
     var overlay = document.getElementById('folder-overlay');
     var panel = document.getElementById('folder-overlay-panel');
+
+    // Bring the home screen back
+    document.getElementById('notes-grid').classList.remove('grid-faded');
 
     // Shrink back into the tile it came from
     if (openedFromTile && document.body.contains(openedFromTile)) {
