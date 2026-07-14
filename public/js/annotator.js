@@ -61,6 +61,11 @@
   let stylusTimeout = null;
   const STYLUS_TIMEOUT_MS = 500;
 
+  // Palm rejection toggle: when on (default), fingers only scroll and
+  // pinch-zoom - drawing is stylus-only. When off, fingers can draw.
+  let palmRejectionOn = localStorage.getItem('palmRejection') !== 'off';
+  let touchScrollLast = null; // one-finger scroll tracking while palm mode is on
+
   // Pinch zoom state
   let isPinching = false;
   let initialPinchDistance = 0;
@@ -386,7 +391,7 @@
         upperCanvas.style.webkitTouchCallout = 'none';
 
         upperCanvas.addEventListener('pointerdown', e => {
-          if (e.pointerType === 'touch' && stylusActive) {
+          if (e.pointerType === 'touch' && (palmRejectionOn || stylusActive)) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
@@ -394,7 +399,7 @@
         }, { capture: true });
 
         upperCanvas.addEventListener('pointermove', e => {
-          if (e.pointerType === 'touch' && stylusActive) {
+          if (e.pointerType === 'touch' && (palmRejectionOn || stylusActive)) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
@@ -711,6 +716,17 @@
   // otherwise moving the pen afterwards would keep erasing on hover
   document.addEventListener('pointerup', () => { isErasing = false; precisionErasePrev = null; });
   document.addEventListener('touchend', () => { isErasing = false; precisionErasePrev = null; });
+
+  // ============= PALM REJECTION TOGGLE =============
+
+  window.togglePalmRejection = function() {
+    palmRejectionOn = !palmRejectionOn;
+    localStorage.setItem('palmRejection', palmRejectionOn ? 'on' : 'off');
+    document.getElementById('palm-toggle')?.classList.toggle('palm-active', palmRejectionOn);
+  };
+
+  // Reflect initial state on the toolbar button
+  document.getElementById('palm-toggle')?.classList.toggle('palm-active', palmRejectionOn);
 
   // Precision eraser: punch pixels out of the rendered page immediately
   // while the pen is down. The destination-out path added on pen lift
@@ -1568,13 +1584,8 @@
     viewer.addEventListener('touchcancel', endPan);
 
     // Palm rejection
-    const stylusIndicator = document.getElementById('stylus-indicator');
-
     function setStylusActive(active) {
       stylusActive = active;
-      if (stylusIndicator) {
-        stylusIndicator.classList.toggle('hidden', !active);
-      }
     }
 
     // Track stylus on all page containers
@@ -1603,7 +1614,7 @@
         }
         e.target.setPointerCapture(e.pointerId);
       } else if (e.pointerType === 'touch') {
-        if (stylusActive) {
+        if (stylusActive || palmRejectionOn) {
           e.preventDefault();
           e.stopPropagation();
           return;
@@ -1638,16 +1649,30 @@
 
     function handleTouchStart(e) {
       for (const touch of e.changedTouches) {
+        // Apple Pencil also fires touch events (touchType 'stylus') -
+        // only track finger touches here
+        if (touch.touchType === 'stylus') continue;
         activeTouches.set(touch.identifier, touch);
       }
 
-      if (stylusActive && activeTouches.size === 1) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
+      if (activeTouches.size === 1) {
+        if (stylusActive) {
+          // Pen is on the page - a resting palm must not scroll or draw
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (palmRejectionOn) {
+          // Palm mode: one finger scrolls the page
+          const t = Array.from(activeTouches.values())[0];
+          touchScrollLast = { x: t.clientX, y: t.clientY };
+          e.preventDefault();
+          return;
+        }
       }
 
       if (activeTouches.size === 2) {
+        touchScrollLast = null;
         const touches = Array.from(activeTouches.values());
         initialPinchDistance = getTouchDistance(touches[0], touches[1]);
         initialZoomLevel = zoomLevel;
@@ -1672,10 +1697,23 @@
         }
       }
 
-      if (stylusActive && activeTouches.size === 1) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
+      if (activeTouches.size === 1) {
+        if (stylusActive) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (palmRejectionOn && !isPinching) {
+          // Palm mode: one finger scrolls the page
+          const t = Array.from(activeTouches.values())[0];
+          if (touchScrollLast) {
+            viewer.scrollLeft -= t.clientX - touchScrollLast.x;
+            viewer.scrollTop -= t.clientY - touchScrollLast.y;
+          }
+          touchScrollLast = { x: t.clientX, y: t.clientY };
+          e.preventDefault();
+          return;
+        }
       }
 
       if (isPinching && activeTouches.size === 2) {
@@ -1728,6 +1766,10 @@
     function handleTouchEnd(e) {
       for (const touch of e.changedTouches) {
         activeTouches.delete(touch.identifier);
+      }
+
+      if (activeTouches.size === 0) {
+        touchScrollLast = null;
       }
 
       if (activeTouches.size < 2 && isPinching) {

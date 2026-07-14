@@ -110,6 +110,8 @@ async function transcribeAudio(audioBuffer, mimeType = 'audio/webm') {
       file: fs.createReadStream(tempOutputPath),
       model: 'whisper-1',
       language: 'en',
+      // Whisper uses the prompt as style context - primes UK English spelling
+      prompt: 'This transcript uses UK English spelling: colour, organise, realise, centre, favourite.',
       response_format: 'verbose_json',
       timestamp_granularities: ['segment']
     });
@@ -193,7 +195,8 @@ RULES:
 - Keep each bullet to ONE short sentence
 - Extract key points, decisions, and action items
 - Be brief - less is more
-- Use simple, clear language`;
+- Use simple, clear language
+- Use UK English spelling (organise, colour, centre)`;
 
   const userPrompt = `${title ? `Title: ${title}\n\n` : ''}Transcript:\n${transcript}\n\nCreate a brief summary with bullet points.`;
 

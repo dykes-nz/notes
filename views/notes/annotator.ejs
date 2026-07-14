@@ -919,12 +919,22 @@
     }
 
     .audio-summary {
+      flex: 1;
+      min-height: 0;
       padding: 16px;
       overflow-y: auto;
       font-size: 14px;
       line-height: 1.6;
       color: #374151;
       background: #f9fafb;
+    }
+
+    /* When the transcript section is collapsed, the expanded summary
+       fills the remaining panel height (scrolling as needed) */
+    .audio-panel-content:has(.audio-transcript-container.collapsed) .audio-summary-container:not(.collapsed) {
+      max-height: none;
+      flex: 1;
+      min-height: 0;
     }
 
     .audio-summary ul {
@@ -935,6 +945,20 @@
 
     .audio-summary li + li {
       margin-top: 0.5em;
+    }
+
+    /* Palm rejection toggle active state */
+    .ftool-btn.palm-active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+    }
+
+    .ftool-btn.palm-active:hover {
+      background: #2563eb;
+    }
+
+    .ftool-btn.palm-active svg {
+      stroke: white;
     }
 
     /* Audio button active state */
@@ -1097,6 +1121,13 @@
       <button id="tool-select" class="ftool-btn" data-tool="select" onclick="setTool('select')" title="Select">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
+        </svg>
+      </button>
+
+      <!-- Palm rejection toggle: on = fingers scroll/zoom only, off = fingers can draw -->
+      <button id="palm-toggle" onclick="togglePalmRejection()" class="ftool-btn" title="Palm rejection (on: fingers scroll and zoom only)">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.05 4.575a1.575 1.575 0 10-3.15 0v3m3.15-3v-1.5a1.575 1.575 0 013.15 0v1.5m-3.15 0l.075 5.925m3.075.75V4.575m0 0a1.575 1.575 0 013.15 0V15M6.9 7.575V12m0-4.425a1.575 1.575 0 10-3.15 0v6.75c0 4.29 3.51 7.8 7.8 7.8h.75c3.735 0 6.75-3.015 6.75-6.75V9.75a1.575 1.575 0 00-3.15 0"/>
         </svg>
       </button>
 
