@@ -16,6 +16,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <% } %>
   <script src="https://cdn.jsdelivr.net/npm/fabric@4.6.0/dist/fabric.min.js"></script>
+  <!-- fabric's optional erasing module (from fabric@4.6.0 src, not in the CDN dist):
+       per-object precision erasing via fabric.EraserBrush -->
+  <script src="/js/vendor/fabric-eraser-brush.js?v=<%= assetVersion %>"></script>
   <style>
     body {
       font-family: 'Inter', sans-serif;
