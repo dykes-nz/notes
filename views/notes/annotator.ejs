@@ -587,6 +587,92 @@
       .toolbar-divider { height: 20px; margin: 0 3px; }
     }
 
+    /* Thumbnail sidebar */
+    .thumb-panel {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 180px;
+      height: 100vh;
+      height: 100dvh;
+      background: white;
+      box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+      z-index: 900;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s ease;
+      padding-top: var(--safe-area-top);
+    }
+
+    .thumb-panel.collapsed {
+      transform: translateX(-100%);
+      box-shadow: none;
+    }
+
+    .thumb-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+
+    .thumb-panel-header span {
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+    }
+
+    .thumb-close-btn {
+      background: none;
+      border: none;
+      color: #6b7280;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .thumb-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .thumb-item {
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .thumb-item canvas {
+      width: 100%;
+      display: block;
+      border: 2px solid #e5e7eb;
+      border-radius: 6px;
+      background: white;
+    }
+
+    .thumb-item.current canvas {
+      border-color: #3b82f6;
+    }
+
+    .thumb-item span {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      color: #6b7280;
+    }
+
+    /* Page area shrinks when the sidebar is open (overlay on phones) */
+    @media (min-width: 768px) {
+      .annotator-container.thumb-panel-open #canvas-viewer {
+        margin-left: 180px;
+      }
+    }
+
     /* Audio Panel */
     .audio-panel {
       position: fixed;
@@ -1026,6 +1112,15 @@
     </div>
 
     <div class="toolbar-tools">
+      <!-- Page thumbnails sidebar toggle -->
+      <button id="tool-thumbs" onclick="toggleThumbPanel()" class="ftool-btn" title="Page thumbnails">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h6v16H6a2 2 0 01-2-2V6zM12 4h6a2 2 0 012 2v12a2 2 0 01-2 2h-6M7 8h2M7 12h2M7 16h2"/>
+        </svg>
+      </button>
+
+      <div class="toolbar-divider"></div>
+
       <!-- Pen tool -->
       <div class="tool-wrapper">
         <button id="tool-pen" class="ftool-btn has-dropdown active" data-tool="pen" title="Pen">
@@ -1274,6 +1369,19 @@
     </svg>
     <span id="audio-fab-duration" class="fab-duration" style="display: none;"></span>
   </button>
+
+  <!-- Thumbnail sidebar (starts collapsed) -->
+  <div id="thumb-panel" class="thumb-panel collapsed">
+    <div class="thumb-panel-header">
+      <span>Pages</span>
+      <button onclick="toggleThumbPanel()" class="thumb-close-btn" title="Close">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div id="thumb-list" class="thumb-list"></div>
+  </div>
 
   <!-- Audio Panel (sidebar on iPad, bottom bar on mobile) -->
   <div id="audio-panel" class="audio-panel hidden">

@@ -158,6 +158,8 @@
       setupDropdowns();
       // Enable scroll tracking for multi-page documents
       setupScrollListener();
+      // Return to where this note was last left
+      restoreScrollPosition();
       if (loadingOverlay) {
         loadingOverlay.style.display = 'none';
       }
@@ -378,6 +380,8 @@
       container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    if (thumbPanelOpen) renderAllThumbnails();
+
     // Auto-save
     saveState();
   };
@@ -548,10 +552,13 @@
       if (undoStacks[pageNum].length > 50) {
         undoStacks[pageNum].shift();
       }
+      scheduleThumbRefresh(pageNum);
     }
   }
 
   // ============= SCROLL TRACKING =============
+
+  let scrollSaveTimer = null;
 
   function setupScrollListener() {
     const viewer = document.getElementById('canvas-viewer');
@@ -580,7 +587,138 @@
       if (closestPage !== currentPage) {
         currentPage = closestPage;
         updatePageInfo();
+        updateThumbHighlight();
       }
+
+      // Persist the exact scroll position (debounced)
+      clearTimeout(scrollSaveTimer);
+      scrollSaveTimer = setTimeout(saveScrollPosition, 500);
+    });
+  }
+
+  // ============= LOCATION PERSISTENCE =============
+
+  function getScrollKey() {
+    return 'noteScroll_' + NOTE_ID;
+  }
+
+  function saveScrollPosition() {
+    const viewer = document.getElementById('canvas-viewer');
+    if (!viewer) return;
+    try {
+      localStorage.setItem(getScrollKey(), JSON.stringify({
+        top: viewer.scrollTop,
+        left: viewer.scrollLeft,
+        zoom: zoomLevel
+      }));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }
+
+  function restoreScrollPosition() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(getScrollKey()));
+      if (!saved) return;
+
+      // Zoom must be restored first - scroll offsets depend on it
+      if (saved.zoom && Math.abs(saved.zoom - zoomLevel) > 0.01) {
+        zoomLevel = saved.zoom;
+        applyZoomToAllPages();
+        updateZoomDisplay();
+      }
+
+      const viewer = document.getElementById('canvas-viewer');
+      if (viewer) {
+        viewer.scrollTop = saved.top || 0;
+        viewer.scrollLeft = saved.left || 0;
+      }
+    } catch (e) {
+      // Ignore parse/storage errors
+    }
+  }
+
+  // ============= THUMBNAIL SIDEBAR =============
+
+  let thumbPanelOpen = false;
+  const thumbTimers = {};
+
+  window.toggleThumbPanel = function() {
+    thumbPanelOpen = !thumbPanelOpen;
+    const panel = document.getElementById('thumb-panel');
+    const container = document.querySelector('.annotator-container');
+    panel?.classList.toggle('collapsed', !thumbPanelOpen);
+    container?.classList.toggle('thumb-panel-open', thumbPanelOpen);
+    document.getElementById('tool-thumbs')?.classList.toggle('active', thumbPanelOpen);
+    if (thumbPanelOpen) {
+      renderAllThumbnails();
+    }
+  };
+
+  function renderAllThumbnails() {
+    const list = document.getElementById('thumb-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      const item = document.createElement('div');
+      item.className = 'thumb-item' + (pageNum === currentPage ? ' current' : '');
+      item.dataset.page = pageNum;
+
+      const canvas = document.createElement('canvas');
+      item.appendChild(canvas);
+
+      const label = document.createElement('span');
+      label.textContent = pageNum;
+      item.appendChild(label);
+
+      item.addEventListener('click', function() {
+        pageContainers[pageNum]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
+      list.appendChild(item);
+      drawThumbnail(pageNum, canvas);
+    }
+  }
+
+  // Composite the page (PDF background if any, plus ink) into a small canvas
+  function drawThumbnail(pageNum, targetCanvas) {
+    const container = pageContainers[pageNum];
+    const fc = fabricCanvases[pageNum];
+    if (!container || !fc) return;
+
+    const w = 300; // ~150 css px at 2x for sharpness
+    const h = Math.max(1, Math.round(w * fc.height / fc.width));
+    targetCanvas.width = w;
+    targetCanvas.height = h;
+
+    const ctx = targetCanvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+
+    const pdfCanvas = container.querySelector('.pdf-canvas');
+    if (pdfCanvas) {
+      ctx.drawImage(pdfCanvas, 0, 0, w, h);
+    }
+    if (fc.lowerCanvasEl) {
+      ctx.drawImage(fc.lowerCanvasEl, 0, 0, w, h);
+    }
+  }
+
+  // Refresh a page's thumbnail a moment after its last change
+  function scheduleThumbRefresh(pageNum) {
+    if (!thumbPanelOpen) return;
+    clearTimeout(thumbTimers[pageNum]);
+    thumbTimers[pageNum] = setTimeout(() => {
+      const canvas = document.querySelector('#thumb-list .thumb-item[data-page="' + pageNum + '"] canvas');
+      if (canvas) drawThumbnail(pageNum, canvas);
+    }, 2000);
+  }
+
+  function updateThumbHighlight() {
+    if (!thumbPanelOpen) return;
+    document.querySelectorAll('#thumb-list .thumb-item').forEach(item => {
+      item.classList.toggle('current', parseInt(item.dataset.page) === currentPage);
     });
   }
 
@@ -1192,6 +1330,8 @@
     }
 
     isRestoringState = false;
+
+    if (thumbPanelOpen) renderAllThumbnails();
 
     // Save state
     saveState();
@@ -1970,6 +2110,11 @@
     // Autosave
     setInterval(saveState, 30000);
     window.addEventListener('beforeunload', saveState);
+    window.addEventListener('beforeunload', saveScrollPosition);
+    // iOS standalone apps don't reliably fire beforeunload - save on hide too
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') saveScrollPosition();
+    });
   }
 
   // ============= ZOOM CONTROLS =============
@@ -2073,6 +2218,7 @@
         markEraserPaths(canvas);
         canvas.requestRenderAll();
         updateUndoRedoButtons();
+        scheduleThumbRefresh(currentPage);
       });
     }
   };
@@ -2091,6 +2237,7 @@
         markEraserPaths(canvas);
         canvas.requestRenderAll();
         updateUndoRedoButtons();
+        scheduleThumbRefresh(currentPage);
       });
     }
   };
