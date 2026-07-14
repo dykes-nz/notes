@@ -16,15 +16,7 @@
 <div class="mx-auto" style="max-width: calc(100% - 400px); margin: 200px 200px 0 200px;">
   <!-- Notes Grid -->
   <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-    ${notes.length === 0 ? `
-    <div class="col-span-full text-center py-16">
-      <svg class="w-20 h-20 mx-auto text-white/60 mb-4" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-      </svg>
-      <p class="text-white/80 text-lg" style="text-shadow: 0 1px 3px rgba(0,0,0,0.5);">No notes yet</p>
-      <p class="text-white/60 text-sm mt-2" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">Use the menu to create a new note</p>
-    </div>
-    ` : notes.map((note, index) => `
+    ${notes.length === 0 ? `` : notes.map((note, index) => `
     <div class="note-card bg-white/40 backdrop-blur-sm rounded-xl border border-gray-200 p-4 hover:shadow-lg hover:bg-white/70 transition relative group" draggable="true" data-note-id="${note.id}" data-index="${index}">
       <div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">

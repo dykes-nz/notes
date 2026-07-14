@@ -155,7 +155,7 @@ router.post('/note', requireAuth, async (req, res) => {
   const noteId = result.lastInsertRowid;
 
   // Return JSON if requested, otherwise redirect
-  if (req.headers['content-type'] === 'application/json') {
+  if (req.headers['content-type']?.includes('application/json') || req.headers['accept']?.includes('application/json')) {
     res.json({ success: true, noteId });
   } else {
     res.redirect(`/note/${noteId}`);
