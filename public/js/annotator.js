@@ -556,10 +556,26 @@
 
   }
 
+  // While a multi-object (lasso) selection is active, fabric holds the
+  // selected objects' coordinates relative to the selection - serialising
+  // in that state corrupts positions. Briefly drop and restore it.
+  function canvasToJSON(canvas) {
+    const active = canvas.getActiveObject();
+    if (active && active.type === 'activeSelection') {
+      const objs = active.getObjects();
+      canvas.discardActiveObject();
+      const json = canvas.toJSON(['globalCompositeOperation', 'isEraser']);
+      const sel = new fabric.ActiveSelection(objs, { canvas: canvas });
+      canvas.setActiveObject(sel);
+      return json;
+    }
+    return canvas.toJSON(['globalCompositeOperation', 'isEraser']);
+  }
+
   function saveToUndoStack(pageNum) {
     const canvas = fabricCanvases[pageNum];
     if (canvas) {
-      const json = canvas.toJSON(['globalCompositeOperation', 'isEraser']);
+      const json = canvasToJSON(canvas);
       undoStacks[pageNum].push(JSON.stringify(json));
       if (undoStacks[pageNum].length > 50) {
         undoStacks[pageNum].shift();
@@ -791,9 +807,12 @@
     switch (currentTool) {
       case 'select':
         canvas.isDrawingMode = false;
-        canvas.defaultCursor = 'default';
-        canvas.selection = true;
-        canvas.forEachObject(obj => { obj.selectable = true; });
+        canvas.defaultCursor = 'crosshair';
+        canvas.selection = false; // lasso replaces the rectangle marquee
+        attachLassoHandlers(canvas);
+        canvas.forEachObject(obj => {
+          obj.selectable = !obj.isEraser && !obj.excludeFromExport;
+        });
         break;
 
       case 'pen':
@@ -1068,6 +1087,131 @@
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
     ctx.restore();
+  }
+
+  // ============= LASSO SELECT =============
+  // Drag on empty space with the select tool to draw a dotted lasso;
+  // on release, everything inside it or touching its edge becomes one
+  // combined selection. Tapping an object directly still selects it.
+
+  let lassoPoints = null;
+  let lassoCanvas = null;
+
+  function attachLassoHandlers(canvas) {
+    canvas.on('mouse:down', (e) => {
+      if (currentTool !== 'select') return;
+      if (e.target) return; // direct tap on an object - normal selection
+      lassoCanvas = canvas;
+      lassoPoints = [canvas.getPointer(e.e)];
+    });
+
+    canvas.on('mouse:move', (e) => {
+      if (!lassoPoints || lassoCanvas !== canvas) return;
+      const p = canvas.getPointer(e.e);
+      const last = lassoPoints[lassoPoints.length - 1];
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 3) return;
+      lassoPoints.push(p);
+      drawLassoOutline(canvas);
+    });
+
+    canvas.on('mouse:up', () => {
+      if (!lassoPoints || lassoCanvas !== canvas) return;
+      const points = lassoPoints;
+      lassoPoints = null;
+      lassoCanvas = null;
+      canvas.clearContext(canvas.contextTop);
+
+      if (points.length < 3) return; // a tap, not a lasso
+
+      const selected = canvas.getObjects().filter(obj =>
+        !obj.excludeFromExport && !obj.isEraser && obj.selectable !== false &&
+        objectTouchesLasso(obj, points)
+      );
+
+      if (selected.length === 1) {
+        canvas.setActiveObject(selected[0]);
+      } else if (selected.length > 1) {
+        const sel = new fabric.ActiveSelection(selected, { canvas: canvas });
+        canvas.setActiveObject(sel);
+      }
+      canvas.requestRenderAll();
+    });
+  }
+
+  function drawLassoOutline(canvas) {
+    const ctx = canvas.contextTop;
+    const retina = canvas.getRetinaScaling();
+    const vt = canvas.viewportTransform;
+    const scale = vt[0] || 1;
+
+    canvas.clearContext(ctx);
+    ctx.save();
+    ctx.setTransform(retina, 0, 0, retina, 0, 0);
+    ctx.transform(vt[0], vt[1], vt[2], vt[3], vt[4], vt[5]);
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 1.5 / scale;
+    ctx.setLineDash([6 / scale, 4 / scale]);
+    ctx.beginPath();
+    ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+    for (let i = 1; i < lassoPoints.length; i++) {
+      ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function pointInPolygon(pt, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i].x, yi = poly[i].y;
+      const xj = poly[j].x, yj = poly[j].y;
+      if (((yi > pt.y) !== (yj > pt.y)) &&
+          (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  function segmentsIntersect(a, b, c, d) {
+    const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+    const d1 = cross(c, d, a);
+    const d2 = cross(c, d, b);
+    const d3 = cross(a, b, c);
+    const d4 = cross(a, b, d);
+    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  }
+
+  // Object counts as lassoed if its bounding box is inside the lasso or
+  // touches its edge
+  function objectTouchesLasso(obj, poly) {
+    const r = obj.getBoundingRect(true, true);
+    const corners = [
+      { x: r.left, y: r.top },
+      { x: r.left + r.width, y: r.top },
+      { x: r.left + r.width, y: r.top + r.height },
+      { x: r.left, y: r.top + r.height }
+    ];
+
+    // Any corner inside the lasso
+    if (corners.some(c => pointInPolygon(c, poly))) return true;
+
+    // Any lasso point inside the box (lasso drawn within a big object)
+    if (poly.some(p =>
+      p.x >= r.left && p.x <= r.left + r.width &&
+      p.y >= r.top && p.y <= r.top + r.height)) return true;
+
+    // Lasso edge crossing a box edge
+    const edges = [
+      [corners[0], corners[1]], [corners[1], corners[2]],
+      [corners[2], corners[3]], [corners[3], corners[0]]
+    ];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length]; // includes the closing segment
+      if (edges.some(([c, d]) => segmentsIntersect(a, b, c, d))) return true;
+    }
+    return false;
   }
 
   // Eraser hole-punch paths must never be hit-testable or selectable
@@ -2371,7 +2515,7 @@
   function saveState() {
     try {
       Object.keys(fabricCanvases).forEach(pageNum => {
-        canvasStates[pageNum] = fabricCanvases[pageNum].toJSON(['globalCompositeOperation', 'isEraser']);
+        canvasStates[pageNum] = canvasToJSON(fabricCanvases[pageNum]);
       });
 
       const hasAnnotations = Object.values(canvasStates).some(state =>
@@ -2448,7 +2592,7 @@
   window.saveAnnotations = async function() {
     try {
       Object.keys(fabricCanvases).forEach(pageNum => {
-        canvasStates[pageNum] = fabricCanvases[pageNum].toJSON(['globalCompositeOperation', 'isEraser']);
+        canvasStates[pageNum] = canvasToJSON(fabricCanvases[pageNum]);
       });
 
       const response = await fetch('/note/' + NOTE_ID + '/canvas', {

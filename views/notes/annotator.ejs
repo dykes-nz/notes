@@ -1215,10 +1215,11 @@
 
       <div class="toolbar-divider"></div>
 
-      <!-- Select tool -->
-      <button id="tool-select" class="ftool-btn" data-tool="select" onclick="setTool('select')" title="Select">
+      <!-- Select tool (lasso) -->
+      <button id="tool-select" class="ftool-btn" data-tool="select" onclick="setTool('select')" title="Lasso select">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
+          <ellipse cx="12" cy="9" rx="8" ry="5" stroke-width="2" stroke-dasharray="3.5 2.5" stroke-linecap="round"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6.5 13.2c-1.6 1.6-1.9 3.3-.6 4.6 1 1 2.6.9 3.6 2.2.5.7.5 1.6.2 2.4"/>
         </svg>
       </button>
 
