@@ -13,6 +13,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    /* Parsed before the Tailwind CDN script runs - stops hidden modals
+       flashing as a white bar at the bottom during page load */
+    .hidden { display: none !important; }
+
     body { font-family: 'Inter', sans-serif; }
     .bg-random {
       background-size: cover;
