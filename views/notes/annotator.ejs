@@ -479,26 +479,6 @@
     .ftool-btn.save-btn:hover { background: #16a34a; }
     .ftool-btn.save-btn svg { stroke: white; }
 
-    /* Stylus indicator - absolutely positioned badge so showing/hiding it
-       never changes the toolbar's width (which shifted the centered toolbar) */
-    .stylus-indicator {
-      position: absolute;
-      top: -8px;
-      right: -8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 4px;
-      background: #dbeafe;
-      color: #1d4ed8;
-      border-radius: 9999px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-      pointer-events: none;
-    }
-
-    .stylus-indicator svg { width: 14px; height: 14px; }
-    .stylus-indicator.hidden { display: none; }
-
     /* Loading */
     .loading-overlay {
       position: fixed;
@@ -1236,12 +1216,6 @@
         </div>
       </div>
 
-      <!-- Stylus indicator -->
-      <span id="stylus-indicator" class="stylus-indicator hidden" title="Stylus active">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-        </svg>
-      </span>
     </div>
   </div>
 

@@ -528,6 +528,7 @@
     canvas.off('mouse:up');
 
     canvas.selection = (currentTool === 'select');
+    canvas.perPixelTargetFind = false;
 
     switch (currentTool) {
       case 'select':
@@ -558,7 +559,11 @@
       case 'eraser':
         canvas.isDrawingMode = false;
         canvas.defaultCursor = 'pointer';
-        canvas.on('mouse:down', createEraserHandler(canvas));
+        // Per-pixel hit testing so dragging only erases strokes actually
+        // crossed, not their bounding boxes
+        canvas.perPixelTargetFind = true;
+        canvas.targetFindTolerance = 12;
+        attachEraserHandlers(canvas);
         canvas.forEachObject(obj => { obj.selectable = false; });
         break;
 
@@ -664,15 +669,36 @@
     });
   }
 
-  // Factory functions for handlers
-  function createEraserHandler(canvas) {
-    return function(e) {
-      if (e.target && canvas) {
-        canvas.remove(e.target);
+  // Stroke eraser: tap an object or drag across objects to remove them
+  let isErasing = false;
+
+  function attachEraserHandlers(canvas) {
+    const eraseAt = (e) => {
+      const target = e.target || canvas.findTarget(e.e, true);
+      if (target && !target.excludeFromExport) {
+        canvas.remove(target);
         canvas.renderAll();
       }
     };
+
+    canvas.on('mouse:down', (e) => {
+      isErasing = true;
+      eraseAt(e);
+    });
+
+    canvas.on('mouse:move', (e) => {
+      if (isErasing) eraseAt(e);
+    });
+
+    canvas.on('mouse:up', () => {
+      isErasing = false;
+    });
   }
+
+  // Safety: stop erasing if the pointer is released outside the canvas,
+  // otherwise moving the pen afterwards would keep erasing on hover
+  document.addEventListener('pointerup', () => { isErasing = false; });
+  document.addEventListener('touchend', () => { isErasing = false; });
 
   function createTextHandler(canvas) {
     return function(e) {
