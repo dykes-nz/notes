@@ -19,11 +19,18 @@
 
     /* Neutral backdrop while the background photo loads - never white */
     body { font-family: 'Inter', sans-serif; background-color: #52525b; }
-    .bg-random {
+    /* Photo on a fixed full-viewport layer: cover crops it to fill the
+       screen in both orientations (body backgrounds with fixed
+       attachment mis-size on iOS, leaving bars) */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image: var(--bg-image, none);
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
-      background-attachment: fixed;
     }
     .menu-icon {
       stroke: white;
@@ -106,7 +113,7 @@
     (function() {
       var bgUrl = '/backgrounds/' + randomBg;
       function apply() {
-        function set() { document.body.style.backgroundImage = 'url("' + bgUrl + '")'; }
+        function set() { document.body.style.setProperty('--bg-image', 'url("' + bgUrl + '")'); }
         if (document.body) set();
         else document.addEventListener('DOMContentLoaded', set);
       }
