@@ -804,6 +804,33 @@
       padding: 12px 16px;
       border-bottom: 1px solid #e5e7eb;
       flex-shrink: 0;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .audio-section-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .section-chevron {
+      transition: transform 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .collapsed .section-chevron {
+      transform: rotate(-90deg);
+    }
+
+    .audio-transcript-container.collapsed {
+      flex: 0 0 auto;
+    }
+
+    .audio-transcript-container.collapsed .audio-transcript,
+    .audio-summary-container.collapsed .audio-summary {
+      display: none;
     }
 
     .audio-transcript-header span {
@@ -865,6 +892,9 @@
       padding: 12px 16px;
       border-bottom: 1px solid #e5e7eb;
       flex-shrink: 0;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .audio-summary-header span {
@@ -881,6 +911,16 @@
       line-height: 1.6;
       color: #374151;
       background: #f9fafb;
+    }
+
+    .audio-summary ul {
+      list-style-type: disc;
+      padding-left: 1.25em;
+      margin: 0;
+    }
+
+    .audio-summary li + li {
+      margin-top: 0.5em;
     }
 
     /* Audio button active state */
@@ -1179,10 +1219,15 @@
         </div>
       </div>
 
-      <div class="audio-transcript-container">
-        <div class="audio-transcript-header">
-          <span>Transcript</span>
-          <button id="summarize-btn" onclick="summarizeTranscript()" class="summarize-btn" disabled>
+      <div id="audio-transcript-container" class="audio-transcript-container">
+        <div class="audio-transcript-header" onclick="toggleAudioSection('transcript')">
+          <span class="audio-section-title">
+            <svg class="section-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
+            </svg>
+            Transcript
+          </span>
+          <button id="summarize-btn" onclick="event.stopPropagation(); summarizeTranscript()" class="summarize-btn" disabled>
             Summarise
           </button>
         </div>
@@ -1192,8 +1237,13 @@
       </div>
 
       <div id="audio-summary-container" class="audio-summary-container hidden">
-        <div class="audio-summary-header">
-          <span>Summary</span>
+        <div class="audio-summary-header" onclick="toggleAudioSection('summary')">
+          <span class="audio-section-title">
+            <svg class="section-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
+            </svg>
+            Summary
+          </span>
         </div>
         <div id="audio-summary" class="audio-summary"></div>
       </div>

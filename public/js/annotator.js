@@ -1942,6 +1942,34 @@
     }
   };
 
+  window.toggleAudioSection = function(section) {
+    const container = document.getElementById(
+      section === 'summary' ? 'audio-summary-container' : 'audio-transcript-container'
+    );
+    container?.classList.toggle('collapsed');
+  };
+
+  // Render summary text as a bulleted list, one bullet per line
+  function displaySummary(summary) {
+    const summaryContainer = document.getElementById('audio-summary-container');
+    const summaryEl = document.getElementById('audio-summary');
+    if (!summaryContainer || !summaryEl) return;
+
+    const escapeHtml = (s) => s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const items = summary
+      .split('\n')
+      .map(line => line.replace(/^\s*[-•*]\s*/, '').trim())
+      .filter(Boolean);
+
+    summaryEl.innerHTML = '<ul>' + items.map(i => '<li>' + escapeHtml(i) + '</li>').join('') + '</ul>';
+    summaryContainer.classList.remove('hidden');
+    summaryContainer.classList.remove('collapsed');
+  }
+
   async function loadTranscript() {
     try {
       const response = await fetch('/note/' + NOTE_ID + '/transcript');
@@ -1953,12 +1981,7 @@
       }
 
       if (result.summary) {
-        const summaryContainer = document.getElementById('audio-summary-container');
-        const summaryEl = document.getElementById('audio-summary');
-        if (summaryContainer && summaryEl) {
-          summaryEl.textContent = result.summary;
-          summaryContainer.classList.remove('hidden');
-        }
+        displaySummary(result.summary);
       }
     } catch (e) {
       console.warn('Could not load transcript:', e);
@@ -2228,12 +2251,7 @@
       const result = await response.json();
 
       if (result.summary) {
-        const summaryContainer = document.getElementById('audio-summary-container');
-        const summaryEl = document.getElementById('audio-summary');
-        if (summaryContainer && summaryEl) {
-          summaryEl.textContent = result.summary;
-          summaryContainer.classList.remove('hidden');
-        }
+        displaySummary(result.summary);
       } else if (result.error) {
         alert('Summarisation failed: ' + result.error);
       }

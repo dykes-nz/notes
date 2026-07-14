@@ -188,7 +188,8 @@ async function summariseTranscript(transcript, title = '') {
   const systemPrompt = `You are a helpful assistant that summarises audio transcripts into clear, concise notes.
 
 RULES:
-- Use bullet points for clarity
+- Output ONLY bullet points, one per line, each starting with "- "
+- No headings, intro text, or nested bullets
 - Keep each bullet to ONE short sentence
 - Extract key points, decisions, and action items
 - Be brief - less is more
