@@ -16,10 +16,41 @@
 <style>
   /* Suppress iOS long-press link preview so protracted touch can rename */
   .note-card a { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-  /* Drag handle has no hover state on touch devices - keep it faintly visible */
+
+  /* Touch devices: nothing may appear/disappear on hover, otherwise iOS
+     consumes the first tap as "hover" and notes need two taps to open.
+     The drag handle stays faintly visible; delete comes via long-press. */
   @media (hover: none) {
-    .note-drag-handle { opacity: 0.35; }
+    .note-drag-handle { opacity: 0.35 !important; }
+    .note-delete-btn { display: none !important; }
   }
+
+  /* Desktop-only hover conveniences (kept out of the markup so touch
+     devices never see hover-dependent styling) */
+  @media (hover: hover) {
+    .note-card:hover { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); background-color: rgba(255,255,255,0.6); }
+    .folder-tile:hover { background-color: rgba(255,255,255,0.4); }
+  }
+
+  /* Floating trash button revealed by long-press */
+  .card-trash-btn {
+    position: fixed;
+    z-index: 60;
+    display: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 9999px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .card-trash-btn.visible { display: flex; }
+  .card-trash-btn:active { background: #dc2626; }
+  .card-trash-btn svg { width: 20px; height: 20px; }
   .title-edit {
     font-family: 'Space Grotesk', sans-serif;
     font-size: 1.25rem;
@@ -69,7 +100,7 @@
   <!-- Grid: folder tiles and loose notes share one ordering -->
   <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     ${gridItems.length === 0 ? `` : gridItems.map((item, index) => item.kind === 'folder' ? `
-    <div class="note-card folder-tile bg-white/20 backdrop-blur-sm rounded-xl p-4 hover:shadow-lg hover:bg-white/40 transition relative group" draggable="false" data-folder-id="${item.folder.id}" data-index="${index}">
+    <div class="note-card folder-tile bg-white/20 backdrop-blur-sm rounded-xl p-4 relative group" draggable="false" data-folder-id="${item.folder.id}" data-index="${index}">
       <div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="9" cy="6" r="2"/>
@@ -90,7 +121,7 @@
       </div>
     </div>
     ` : `
-    <div class="note-card bg-white/30 backdrop-blur-sm rounded-xl border border-gray-200 p-4 hover:shadow-lg hover:bg-white/60 transition relative group" draggable="false" data-note-id="${item.note.id}" data-index="${index}">
+    <div class="note-card bg-white/30 backdrop-blur-sm rounded-xl border border-gray-200 p-4 relative group" draggable="false" data-note-id="${item.note.id}" data-index="${index}">
       <div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="9" cy="6" r="2"/>
@@ -106,7 +137,7 @@
         <p class="text-sm text-gray-500">Updated ${new Date(item.note.updated_at).toLocaleDateString()}</p>
       </a>
       <button onclick="confirmDeleteNote(${item.note.id}, '${(item.note.title || 'Untitled').replace(/'/g, "\\'")}')"
-              class="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+              class="note-delete-btn absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
               title="Delete note">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -157,6 +188,13 @@
     </div>
   </div>
 </div>
+
+<!-- Floating trash button (long-press on a note reveals it) -->
+<button id="card-trash-btn" class="card-trash-btn" title="Delete note">
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+  </svg>
+</button>
 
 <!-- Folder overlay (iOS-style expanded folder) -->
 <div id="folder-overlay" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center">
@@ -246,9 +284,47 @@
       pressTimer = null;
       suppressClick = true;
       setTimeout(function() { suppressClick = false; }, 600);
+      showCardTrash(card); // capture title before the rename input replaces it
       startInlineRename(card);
     }, LONG_PRESS_MS);
   });
+
+  // ============= LONG-PRESS TRASH BUTTON =============
+
+  var cardTrashBtn = document.getElementById('card-trash-btn');
+  var trashNote = null;
+
+  function showCardTrash(card) {
+    if (!card.dataset.noteId) { hideCardTrash(); return; } // folders self-dissolve
+    var h3 = card.querySelector('h3');
+    trashNote = {
+      id: parseInt(card.dataset.noteId),
+      title: (h3 ? h3.textContent : '') || 'Untitled'
+    };
+    var rect = card.getBoundingClientRect();
+    cardTrashBtn.style.left = (rect.right - 44) + 'px';
+    cardTrashBtn.style.top = Math.max(8, rect.top - 48) + 'px';
+    cardTrashBtn.classList.add('visible');
+  }
+
+  function hideCardTrash() {
+    cardTrashBtn.classList.remove('visible');
+    trashNote = null;
+  }
+
+  cardTrashBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (trashNote) {
+      confirmDeleteNote(trashNote.id, trashNote.title);
+    }
+    hideCardTrash();
+  });
+
+  // Any tap elsewhere dismisses the trash button
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#card-trash-btn')) hideCardTrash();
+  });
+  window.addEventListener('scroll', hideCardTrash, true);
 
   document.addEventListener('pointermove', function(e) {
     if (pressTimer && pressStart &&
