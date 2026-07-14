@@ -25,13 +25,30 @@
   let zoomLevel = 1.0;
   let fitScale = 1.0;
   let currentTool = 'pen';
-  let strokeColor = '#000000';
-  let strokeWidth = 4;
-  let highlighterColor = 'rgba(255,255,0,0.4)';
-  let highlighterWidth = 20;
+
+  // Tool settings persist across notes and sessions
+  const savedToolSettings = (() => {
+    try { return JSON.parse(localStorage.getItem('toolSettings')) || {}; }
+    catch (e) { return {}; }
+  })();
+
+  let strokeColor = savedToolSettings.strokeColor || '#000000';
+  let strokeWidth = savedToolSettings.strokeWidth || 4;
+  let highlighterColor = savedToolSettings.highlighterColor || 'rgba(255,255,0,0.4)';
+  let highlighterWidth = savedToolSettings.highlighterWidth || 20;
   let currentShape = 'line';
   let shapeColor = '#000000';
-  let eraserMode = 'eraser';
+  let eraserMode = savedToolSettings.eraserMode || 'eraser';
+
+  function saveToolSettings() {
+    try {
+      localStorage.setItem('toolSettings', JSON.stringify({
+        strokeColor, strokeWidth, highlighterColor, highlighterWidth, eraserMode
+      }));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }
 
   // Shape drawing state
   let isDrawingShape = false;
@@ -754,6 +771,34 @@
   // Reflect initial state on the toolbar button
   document.getElementById('palm-toggle')?.classList.toggle('palm-active', palmRejectionOn);
 
+  // Reflect restored tool settings in the dropdowns
+  (function syncToolSettingsUI() {
+    document.querySelectorAll('#pen-dropdown .color-swatch').forEach(s => {
+      s.classList.toggle('active', s.dataset.color === strokeColor);
+    });
+    document.querySelectorAll('#pen-dropdown .width-line').forEach(line => {
+      line.style.backgroundColor = strokeColor;
+    });
+    document.querySelectorAll('#pen-dropdown .width-option').forEach(o => {
+      o.classList.toggle('active', parseInt(o.dataset.width) === strokeWidth);
+    });
+
+    document.querySelectorAll('#highlighter-dropdown .color-swatch').forEach(s => {
+      s.classList.toggle('active', s.dataset.color === highlighterColor);
+    });
+    const previewColor = highlighterColor.replace(/[\d.]+\)$/, '0.6)');
+    document.querySelectorAll('#highlighter-dropdown .width-line').forEach(line => {
+      line.style.background = previewColor;
+    });
+    document.querySelectorAll('#highlighter-dropdown .width-option').forEach(o => {
+      o.classList.toggle('active', parseInt(o.dataset.width) === highlighterWidth);
+    });
+
+    document.querySelectorAll('#eraser-dropdown .eraser-mode').forEach(m => {
+      m.classList.toggle('active', m.dataset.mode === eraserMode);
+    });
+  })();
+
   // Precision eraser: punch pixels out of the rendered page immediately
   // while the pen is down. The destination-out path added on pen lift
   // makes the erasure permanent; this just makes it visible live.
@@ -1087,6 +1132,7 @@
         canvas.freeDrawingBrush.color = strokeColor;
       }
     });
+    saveToolSettings();
   };
 
   window.setPenWidth = function(width) {
@@ -1100,6 +1146,7 @@
         canvas.freeDrawingBrush.width = strokeWidth;
       }
     });
+    saveToolSettings();
   };
 
   window.setHighlighterColor = function(color) {
@@ -1118,6 +1165,7 @@
         canvas.freeDrawingBrush.color = highlighterColor;
       }
     });
+    saveToolSettings();
   };
 
   window.setHighlighterWidth = function(width) {
@@ -1131,6 +1179,7 @@
         canvas.freeDrawingBrush.width = highlighterWidth;
       }
     });
+    saveToolSettings();
   };
 
   window.setEraserMode = function(mode) {
@@ -1138,6 +1187,7 @@
     document.querySelectorAll('#eraser-dropdown .eraser-mode').forEach(m => {
       m.classList.toggle('active', m.dataset.mode === mode);
     });
+    saveToolSettings();
     setTool('eraser');
   };
 
