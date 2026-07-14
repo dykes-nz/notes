@@ -717,6 +717,25 @@
   document.addEventListener('pointerup', () => { isErasing = false; precisionErasePrev = null; });
   document.addEventListener('touchend', () => { isErasing = false; precisionErasePrev = null; });
 
+  // ============= FULLSCREEN =============
+
+  window.toggleFullscreen = function() {
+    const doc = document;
+    const el = doc.documentElement;
+    const isFullscreen = doc.fullscreenElement || doc.webkitFullscreenElement;
+
+    if (isFullscreen) {
+      (doc.exitFullscreen || doc.webkitExitFullscreen).call(doc);
+    } else {
+      const request = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (request) {
+        request.call(el);
+      } else {
+        alert('Full screen is not supported in this browser. Tip: add this site to your Home Screen for a full-screen app.');
+      }
+    }
+  };
+
   // ============= PALM REJECTION TOGGLE =============
 
   window.togglePalmRejection = function() {
