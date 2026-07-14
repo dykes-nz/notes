@@ -8,7 +8,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { font-family: 'Inter', sans-serif; }
+    /* Neutral backdrop while the background photo loads - never white */
+    body { font-family: 'Inter', sans-serif; background-color: #52525b; }
     .bg-random {
       background-size: cover;
       background-position: center;
@@ -27,7 +28,25 @@
       'train-station.jpg', 'windmills.jpg'
     ];
     var randomBg = backgrounds[Math.floor(Math.random() * backgrounds.length)];
-    document.write('<style>body { background-image: url("/backgrounds/' + randomBg + '"); }</style>');
+
+    // Apply the background only once fully decoded - a streaming JPEG
+    // paints top-to-bottom, leaving a white band at the bottom
+    (function() {
+      var bgUrl = '/backgrounds/' + randomBg;
+      function apply() {
+        function set() { document.body.style.backgroundImage = 'url("' + bgUrl + '")'; }
+        if (document.body) set();
+        else document.addEventListener('DOMContentLoaded', set);
+      }
+      var pre = new Image();
+      pre.src = bgUrl;
+      if (pre.decode) {
+        pre.decode().then(apply).catch(apply);
+      } else {
+        pre.onload = apply;
+        pre.onerror = apply;
+      }
+    })();
   </script>
 </head>
 <body class="bg-random min-h-screen flex items-center justify-center">
