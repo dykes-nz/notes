@@ -42,10 +42,7 @@
       <path d="M69.63,16.35c.12-5.47,11.61-5.95,18.01-5.85-7.24,5.56-8.25,12.18-11.64,14.86"/>
     </svg>
 
-    <h1 class="text-3xl font-bold text-white mb-2" style="text-shadow: 0 2px 4px rgba(0,0,0,0.4); font-family: 'Space Grotesk', sans-serif;">Notes</h1>
-    <p class="text-white/80 mb-8" style="text-shadow: 0 1px 2px rgba(0,0,0,0.4);"><%= setupNeeded ? 'Set up your passkey to get started' : 'Sign in with Face ID / Touch ID' %></p>
-
-    <div id="passkey-section">
+    <div id="passkey-section" class="mt-6">
       <button type="button" id="passkey-btn" onclick="<%= setupNeeded ? 'setupPasskey()' : 'loginWithPasskey()' %>"
               class="w-full flex items-center justify-center px-6 py-4 bg-white/20 backdrop-blur-sm text-white rounded-xl hover:bg-white/30 transition border border-white/30" style="text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
         <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
