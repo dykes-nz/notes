@@ -275,6 +275,18 @@ router.post('/passkey/:id/delete', async (req, res) => {
   res.json({ success: true });
 });
 
+// Reset all passkeys (temporary - remove after setup)
+router.post('/reset-passkeys', async (req, res) => {
+  const isPostgres = !!process.env.DATABASE_URL;
+  if (isPostgres) {
+    await db.run('DELETE FROM passkey_credentials');
+  } else {
+    db.run('DELETE FROM passkey_credentials');
+  }
+  req.session.destroy(() => {});
+  res.json({ success: true, message: 'All passkeys deleted. Refresh to set up new one.' });
+});
+
 // Logout
 router.post('/logout', (req, res) => {
   req.session.destroy((err) => {
