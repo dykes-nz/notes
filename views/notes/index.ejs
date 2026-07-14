@@ -210,9 +210,7 @@
 <!-- Folder overlay (iOS-style expanded folder) -->
 <div id="folder-overlay" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center">
   <div id="folder-overlay-panel" class="bg-white/85 backdrop-blur-md rounded-2xl p-6 w-full max-w-2xl mx-4 shadow-2xl" style="max-height: 70vh; overflow-y: auto;">
-    <h2 id="folder-overlay-title" class="text-xl font-bold text-gray-800 mb-4 truncate" style="font-family: 'Space Grotesk', sans-serif;">Folder</h2>
     <div id="folder-overlay-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
-    <p class="text-xs text-gray-500 mt-4">Drag a note out of this panel to remove it from the folder. Touch and hold the folder name on the home screen to rename it.</p>
   </div>
 </div>
 
@@ -312,9 +310,10 @@
       id: parseInt(card.dataset.noteId),
       title: (h3 ? h3.textContent : '') || 'Untitled'
     };
+    // Inside the pill, bottom-right corner
     var rect = card.getBoundingClientRect();
-    cardTrashBtn.style.left = (rect.right - 44) + 'px';
-    cardTrashBtn.style.top = Math.max(8, rect.top - 48) + 'px';
+    cardTrashBtn.style.left = (rect.right - 48) + 'px';
+    cardTrashBtn.style.top = (rect.bottom - 48) + 'px';
     cardTrashBtn.classList.add('visible');
   }
 
@@ -370,7 +369,6 @@
     var folder = FOLDERS_DATA.find(function(f) { return f.id === folderId; });
     if (!folder) return;
 
-    document.getElementById('folder-overlay-title').textContent = folder.name;
     var grid = document.getElementById('folder-overlay-grid');
     grid.innerHTML = folder.notes.map(function(n) {
       return '<div class="overlay-note bg-white rounded-lg p-3 shadow cursor-pointer" data-note-id="' + n.id + '">' +
@@ -647,6 +645,18 @@
     };
   });
 
+  // Reordering waits for a short dwell on the target - otherwise the
+  // target card jumps away the instant the drag touches its edge and the
+  // centre (combine zone) can never be reached
+  var reorderCandidate = null;
+  var reorderTimer = null;
+
+  function cancelPendingReorder() {
+    clearTimeout(reorderTimer);
+    reorderTimer = null;
+    reorderCandidate = null;
+  }
+
   document.addEventListener('pointermove', function(e) {
     if (!cardDrag) return;
     cardDrag.moved = true;
@@ -657,31 +667,42 @@
     var target = el && el.closest('.note-card');
     if (!target || target === cardDrag.card) {
       clearCombineTarget();
+      cancelPendingReorder();
       return;
     }
 
+    // Generous combine zone: everything except a thin reorder rim
     var draggedIsNote = !!cardDrag.card.dataset.noteId;
     var rect = target.getBoundingClientRect();
     var inCentre =
-      e.clientX > rect.left + rect.width * 0.2 &&
-      e.clientX < rect.right - rect.width * 0.2 &&
-      e.clientY > rect.top + rect.height * 0.25 &&
-      e.clientY < rect.bottom - rect.height * 0.25;
+      e.clientX > rect.left + rect.width * 0.12 &&
+      e.clientX < rect.right - rect.width * 0.12 &&
+      e.clientY > rect.top + rect.height * 0.15 &&
+      e.clientY < rect.bottom - rect.height * 0.15;
 
     if (draggedIsNote && inCentre) {
+      cancelPendingReorder();
       setCombineTarget(target);
       return;
     }
 
     clearCombineTarget();
 
-    // Reorder: move the (dimmed) card through the grid live
-    var grid = document.getElementById('notes-grid');
-    var cards = Array.from(grid.querySelectorAll('.note-card'));
-    if (cards.indexOf(cardDrag.card) < cards.indexOf(target)) {
-      target.parentNode.insertBefore(cardDrag.card, target.nextSibling);
-    } else {
-      target.parentNode.insertBefore(cardDrag.card, target);
+    // Edge rim: reorder only after dwelling ~180ms on the same target
+    if (reorderCandidate !== target) {
+      reorderCandidate = target;
+      clearTimeout(reorderTimer);
+      reorderTimer = setTimeout(function() {
+        if (!cardDrag || reorderCandidate !== target || !target.parentNode) return;
+        var grid = document.getElementById('notes-grid');
+        var cards = Array.from(grid.querySelectorAll('.note-card'));
+        if (cards.indexOf(cardDrag.card) < cards.indexOf(target)) {
+          target.parentNode.insertBefore(cardDrag.card, target.nextSibling);
+        } else {
+          target.parentNode.insertBefore(cardDrag.card, target);
+        }
+        reorderCandidate = null;
+      }, 180);
     }
   });
 
@@ -690,6 +711,7 @@
       if (!cardDrag) return;
       var d = cardDrag;
       cardDrag = null;
+      cancelPendingReorder();
       d.ghost.remove();
       d.card.style.opacity = '1';
 

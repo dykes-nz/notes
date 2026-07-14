@@ -72,13 +72,29 @@ router.get('/settings', requireAuth, async (req, res) => {
 
 // Home / Notes list
 router.get('/', requireAuth, async (req, res) => {
-  const folders = await dbAll('SELECT * FROM folders ORDER BY sort_order, name');
-  const notes = await dbAll(`
+  let folders = await dbAll('SELECT * FROM folders ORDER BY sort_order, name');
+  let notes = await dbAll(`
     SELECT n.*, f.name as folder_name
     FROM notes n
     LEFT JOIN folders f ON n.folder_id = f.id
     ORDER BY n.sort_order, n.updated_at DESC
   `);
+
+  // Safety sweep: folders with no notes self-destruct; folders with one
+  // note revert to a loose note
+  const stale = folders.filter(f => notes.filter(n => n.folder_id === f.id).length <= 1);
+  if (stale.length > 0) {
+    for (const f of stale) {
+      await dissolveFolderIfNeeded(f.id);
+    }
+    folders = await dbAll('SELECT * FROM folders ORDER BY sort_order, name');
+    notes = await dbAll(`
+      SELECT n.*, f.name as folder_name
+      FROM notes n
+      LEFT JOIN folders f ON n.folder_id = f.id
+      ORDER BY n.sort_order, n.updated_at DESC
+    `);
+  }
 
   // iOS-style home grid: folder tiles and loose notes share one ordering
   const foldersWithNotes = folders.map(f => ({
