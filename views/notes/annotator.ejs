@@ -589,6 +589,29 @@
       .toolbar-divider { height: 20px; margin: 0 3px; }
     }
 
+    /* Floating delete button for selections */
+    .selection-delete-btn {
+      position: fixed;
+      z-index: 1002;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      transform: translateX(-50%);
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 9999px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+      cursor: pointer;
+    }
+
+    .selection-delete-btn.visible { display: flex; }
+    .selection-delete-btn:active { background: #dc2626; }
+    .selection-delete-btn svg { width: 15px; height: 15px; }
+
     /* Thumbnail sidebar */
     .thumb-panel {
       position: fixed;
@@ -1369,6 +1392,14 @@
       <circle cx="12" cy="12" r="10"/>
     </svg>
     <span id="audio-fab-duration" class="fab-duration" style="display: none;"></span>
+  </button>
+
+  <!-- Floating delete button for the active selection -->
+  <button id="selection-delete-btn" class="selection-delete-btn" onclick="deleteSelection()">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+    </svg>
+    Delete
   </button>
 
   <!-- Thumbnail sidebar (starts collapsed) -->

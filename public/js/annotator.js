@@ -540,6 +540,17 @@
       updateUndoRedoButtons();
     });
 
+    // Selection delete button lifecycle
+    fabricCanvas.on('selection:created', function() { showDeleteButton(fabricCanvas); });
+    fabricCanvas.on('selection:updated', function() { showDeleteButton(fabricCanvas); });
+    fabricCanvas.on('selection:cleared', function() {
+      if (selectionCanvas === fabricCanvas) hideDeleteButton();
+    });
+    // Follow the selection while it is dragged/scaled/rotated
+    fabricCanvas.on('object:moving', positionDeleteButton);
+    fabricCanvas.on('object:scaling', positionDeleteButton);
+    fabricCanvas.on('object:rotating', positionDeleteButton);
+
     // Handle precision eraser
     fabricCanvas.on('path:created', function(e) {
       if (currentTool === 'eraser-precision' && e.path) {
@@ -619,6 +630,9 @@
         // Newly-near pages may need their backing store upgraded
         scheduleResolutionUpdate();
       }
+
+      // Keep the delete pill attached to the selection while scrolling
+      if (selectionCanvas) positionDeleteButton();
 
       // Persist the exact scroll position (debounced)
       clearTimeout(scrollSaveTimer);
@@ -762,6 +776,17 @@
     // Exit insert-space mode if switching to another tool
     if (currentTool === 'insert-space' && tool !== 'insert-space') {
       exitInsertSpaceMode();
+    }
+
+    // Leaving select drops any active selection (and its delete pill)
+    if (tool !== 'select') {
+      Object.values(fabricCanvases).forEach(c => {
+        if (c.getActiveObject()) {
+          c.discardActiveObject();
+          c.requestRenderAll();
+        }
+      });
+      hideDeleteButton();
     }
 
     currentTool = tool;
@@ -1088,6 +1113,70 @@
     ctx.stroke();
     ctx.restore();
   }
+
+  // ============= SELECTION DELETE BUTTON =============
+  // A floating Delete pill appears above whatever is selected
+
+  let selectionCanvas = null; // canvas owning the current selection
+
+  function showDeleteButton(canvas) {
+    selectionCanvas = canvas;
+    positionDeleteButton();
+    document.getElementById('selection-delete-btn')?.classList.add('visible');
+  }
+
+  function hideDeleteButton() {
+    selectionCanvas = null;
+    document.getElementById('selection-delete-btn')?.classList.remove('visible');
+  }
+
+  function positionDeleteButton() {
+    const btn = document.getElementById('selection-delete-btn');
+    const canvas = selectionCanvas;
+    if (!btn || !canvas) return;
+    const active = canvas.getActiveObject();
+    if (!active) return;
+
+    const br = active.getBoundingRect();
+    const upperRect = canvas.upperCanvasEl.getBoundingClientRect();
+    const factor = upperRect.width / canvas.getWidth();
+
+    const safeTop = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top')
+    ) || 0;
+
+    const x = upperRect.left + (br.left + br.width / 2) * factor;
+    const y = upperRect.top + br.top * factor - 46;
+
+    btn.style.left = Math.min(Math.max(x, 60), window.innerWidth - 60) + 'px';
+    btn.style.top = Math.max(y, safeTop + 8) + 'px';
+  }
+
+  window.deleteSelection = function() {
+    const canvas = selectionCanvas;
+    if (!canvas) return;
+    const active = canvas.getActiveObject();
+    if (!active) return;
+
+    const objs = active.type === 'activeSelection' ? active.getObjects().slice() : [active];
+    const pageNum = parseInt(
+      Object.keys(fabricCanvases).find(k => fabricCanvases[k] === canvas)
+    ) || currentPage;
+
+    canvas.discardActiveObject();
+
+    // One undo entry for the whole deletion, not one per object
+    isRestoringState = true;
+    objs.forEach(o => canvas.remove(o));
+    isRestoringState = false;
+
+    saveToUndoStack(pageNum);
+    redoStacks[pageNum] = [];
+    updateUndoRedoButtons();
+    canvas.requestRenderAll();
+    hideDeleteButton();
+    saveState();
+  };
 
   // ============= LASSO SELECT =============
   // Drag on empty space with the select tool to draw a dotted lasso;
@@ -2261,7 +2350,7 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', e => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
@@ -2270,6 +2359,11 @@
         } else {
           undo();
         }
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectionCanvas) {
+        e.preventDefault();
+        deleteSelection();
       }
     });
 
