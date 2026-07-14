@@ -8,22 +8,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* Neutral backdrop while the background photo loads - never white.
-       The photo lives on a fixed pseudo-element so it can fade in. */
+    /* Neutral backdrop while the background photo loads - never white */
     body { font-family: 'Inter', sans-serif; background-color: #52525b; }
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      z-index: -1;
-      background-image: var(--bg-image, none);
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      opacity: 0;
-      transition: opacity 0.25s ease;
-    }
-    body.bg-loaded::before { opacity: 1; }
     .bg-random {
       background-size: cover;
       background-position: center;
@@ -48,12 +34,7 @@
     (function() {
       var bgUrl = '/backgrounds/' + randomBg;
       function apply() {
-        function set() {
-          document.body.style.setProperty('--bg-image', 'url("' + bgUrl + '")');
-          requestAnimationFrame(function() {
-            document.body.classList.add('bg-loaded'); // fades in via CSS
-          });
-        }
+        function set() { document.body.style.backgroundImage = 'url("' + bgUrl + '")'; }
         if (document.body) set();
         else document.addEventListener('DOMContentLoaded', set);
       }
