@@ -676,19 +676,10 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.1);
     }
 
-    /* Position: bottom-right on desktop, bottom-center on mobile */
-    @media (min-width: 768px) {
-      .audio-mini-fab {
-        bottom: 24px;
-        right: 24px;
-      }
-    }
-
-    @media (max-width: 767px) {
-      .audio-mini-fab {
-        bottom: 24px;
-        right: 24px;
-      }
+    /* Position: top-right of the page */
+    .audio-mini-fab {
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      right: 16px;
     }
 
     .audio-panel-header {
