@@ -26,6 +26,11 @@
       user-select: none;
     }
 
+    :root {
+      /* iOS status bar height in standalone mode (0 in the browser) */
+      --safe-area-top: env(safe-area-inset-top, 0px);
+    }
+
     .annotator-container {
       display: flex;
       flex-direction: column;
@@ -39,6 +44,8 @@
       overflow: auto;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
+      /* Keep the top of the page reachable below the status bar */
+      padding-top: var(--safe-area-top);
     }
 
     #pages-wrapper {
@@ -106,7 +113,7 @@
     /* Floating toolbar */
     .floating-toolbar {
       position: fixed;
-      top: 0;
+      top: var(--safe-area-top);
       left: 50%;
       transform: translateX(-50%);
       background: white;
@@ -182,6 +189,8 @@
 
     .floating-toolbar.docked-top {
       top: 0;
+      /* Extend the bar under the status bar; buttons sit below it */
+      padding-top: calc(var(--safe-area-top) + 4px);
       border-radius: 0 0 8px 8px;
     }
 
@@ -601,6 +610,7 @@
         width: 320px;
         height: 100vh;
         height: 100dvh;
+        padding-top: var(--safe-area-top);
       }
 
       .audio-panel.hidden {

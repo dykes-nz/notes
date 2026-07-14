@@ -1586,8 +1586,12 @@
 
       const maxX = window.innerWidth - 50;
       const maxY = window.innerHeight - 50;
+      // Keep the toolbar below the iOS status bar in standalone mode
+      const safeTop = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top')
+      ) || 0;
       newX = Math.max(-20, Math.min(newX, maxX));
-      newY = Math.max(-20, Math.min(newY, maxY));
+      newY = Math.max(safeTop, Math.min(newY, maxY));
 
       toolbar.style.left = newX + 'px';
       toolbar.style.top = newY + 'px';
