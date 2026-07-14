@@ -40,9 +40,12 @@
   let tempShape = null;
   let activeShapeCanvas = null;
 
+  // Page background template for blank ink pages
+  let backgroundTemplate = 'blank';
+
   // Insert space state
   let isInsertSpaceMode = false;
-  let insertSpaceLine = null;
+  let insertSpaceRect = null;
   let insertSpaceStartY = 0;
   let insertSpacePageNum = 0;
 
@@ -208,6 +211,11 @@
     pagesWrapper.innerHTML = '';
     calculateInkPageDimensions();
 
+    // Reflect restored background template in the dropdown
+    document.querySelectorAll('#bg-dropdown .bg-option').forEach(o => {
+      o.classList.toggle('active', o.dataset.bg === backgroundTemplate);
+    });
+
     // Render all ink pages
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
       await renderSingleInkPage(pageNum);
@@ -224,8 +232,8 @@
     pageContainer.style.width = inkPageWidth + 'px';
     pageContainer.style.height = inkPageHeight + 'px';
     pageContainer.style.position = 'relative';
-    pageContainer.style.background = 'white';
     pageContainer.style.marginBottom = '20px';
+    applyBackgroundToContainer(pageContainer);
 
     const annotationCanvas = document.createElement('canvas');
     annotationCanvas.id = 'annotation-canvas-' + pageNum;
@@ -607,41 +615,43 @@
       insertSpaceStartY = pointer.y;
       insertSpacePageNum = pageNum;
 
-      // Create a horizontal line at the click point
-      insertSpaceLine = new fabric.Line([0, pointer.y, canvas.width, pointer.y], {
-        stroke: '#3b82f6',
-        strokeWidth: 2,
+      // Light grey rectangle showing how much space will be added
+      insertSpaceRect = new fabric.Rect({
+        left: 0,
+        top: pointer.y,
+        width: canvas.width,
+        height: 0,
+        fill: 'rgba(107, 114, 128, 0.12)',
+        stroke: 'rgba(107, 114, 128, 0.35)',
+        strokeWidth: 1,
         strokeDashArray: [5, 5],
         selectable: false,
         evented: false,
         excludeFromExport: true
       });
-      canvas.add(insertSpaceLine);
+      canvas.add(insertSpaceRect);
       canvas.renderAll();
     });
 
     canvas.on('mouse:move', function(e) {
-      if (currentTool !== 'insert-space' || !insertSpaceLine) return;
+      if (currentTool !== 'insert-space' || !insertSpaceRect) return;
 
       const pointer = canvas.getPointer(e.e);
-      const newY = pointer.y;
 
       // Only allow dragging down
-      if (newY > insertSpaceStartY) {
-        insertSpaceLine.set({ y1: newY, y2: newY });
-        canvas.renderAll();
-      }
+      insertSpaceRect.set({ height: Math.max(0, pointer.y - insertSpaceStartY) });
+      canvas.renderAll();
     });
 
     canvas.on('mouse:up', function(e) {
-      if (currentTool !== 'insert-space' || !insertSpaceLine) return;
+      if (currentTool !== 'insert-space' || !insertSpaceRect) return;
 
       const pointer = canvas.getPointer(e.e);
       const spaceAmount = Math.max(0, pointer.y - insertSpaceStartY);
 
-      // Remove the visual line
-      canvas.remove(insertSpaceLine);
-      insertSpaceLine = null;
+      // Remove the preview rectangle - the space is inserted on release
+      canvas.remove(insertSpaceRect);
+      insertSpaceRect = null;
 
       if (spaceAmount > 10) {
         // Actually insert the space
@@ -753,6 +763,78 @@
     };
   }
 
+  // ============= PAGE BACKGROUND TEMPLATES =============
+
+  // CSS pattern for a template, sized in canvas px (page is A4: 210mm wide)
+  function backgroundCss(template) {
+    const pxPerMm = inkPageWidth / 210;
+    const lineW = Math.max(1, Math.round(pxPerMm * 0.2));
+    const lineColor = '#dbe2ea';
+
+    switch (template) {
+      case 'dots': {
+        const s = Math.round(pxPerMm * 5);
+        const r = Math.max(1.5, pxPerMm * 0.35);
+        return {
+          image: 'radial-gradient(circle, #c3ccd8 ' + r + 'px, transparent ' + r + 'px)',
+          size: s + 'px ' + s + 'px'
+        };
+      }
+      case 'lines-thin': {
+        const s = Math.round(pxPerMm * 7);
+        return {
+          image: 'linear-gradient(to bottom, ' + lineColor + ' ' + lineW + 'px, transparent ' + lineW + 'px)',
+          size: '100% ' + s + 'px'
+        };
+      }
+      case 'lines-wide': {
+        const s = Math.round(pxPerMm * 10);
+        return {
+          image: 'linear-gradient(to bottom, ' + lineColor + ' ' + lineW + 'px, transparent ' + lineW + 'px)',
+          size: '100% ' + s + 'px'
+        };
+      }
+      case 'grid': {
+        const s = Math.round(pxPerMm * 5);
+        return {
+          image: 'linear-gradient(to bottom, ' + lineColor + ' ' + lineW + 'px, transparent ' + lineW + 'px), ' +
+                 'linear-gradient(to right, ' + lineColor + ' ' + lineW + 'px, transparent ' + lineW + 'px)',
+          size: s + 'px ' + s + 'px'
+        };
+      }
+      default:
+        return null; // blank
+    }
+  }
+
+  function applyBackgroundToContainer(container) {
+    const css = MODE === 'ink' ? backgroundCss(backgroundTemplate) : null;
+    container.style.background = 'white';
+    if (css) {
+      container.style.backgroundImage = css.image;
+      container.style.backgroundSize = css.size;
+    }
+  }
+
+  window.setPageBackground = function(template) {
+    backgroundTemplate = template;
+    Object.values(pageContainers).forEach(applyBackgroundToContainer);
+    document.querySelectorAll('#bg-dropdown .bg-option').forEach(o => {
+      o.classList.toggle('active', o.dataset.bg === template);
+    });
+    closeBgDropdown();
+    saveState();
+  };
+
+  window.toggleBgDropdown = function(e) {
+    if (e) e.stopPropagation();
+    document.getElementById('bg-dropdown')?.classList.toggle('open');
+  };
+
+  function closeBgDropdown() {
+    document.getElementById('bg-dropdown')?.classList.remove('open');
+  }
+
   // ============= INSERT SPACE TOOL =============
 
   function enterInsertSpaceMode() {
@@ -766,91 +848,96 @@
 
   function exitInsertSpaceMode() {
     isInsertSpaceMode = false;
-    // Remove any existing insert line
-    if (insertSpaceLine && insertSpacePageNum && fabricCanvases[insertSpacePageNum]) {
-      fabricCanvases[insertSpacePageNum].remove(insertSpaceLine);
+    // Remove any in-progress preview rectangle
+    if (insertSpaceRect && insertSpacePageNum && fabricCanvases[insertSpacePageNum]) {
+      fabricCanvases[insertSpacePageNum].remove(insertSpaceRect);
       fabricCanvases[insertSpacePageNum].renderAll();
     }
-    insertSpaceLine = null;
+    insertSpaceRect = null;
     insertSpaceStartY = 0;
     insertSpacePageNum = 0;
   }
 
-  // Insert vertical space by moving objects down and reflowing across pages
+  // Insert vertical space by moving objects down. Page height is fixed:
+  // objects that end up within BOTTOM_MARGIN of the page bottom transfer to
+  // the top of the next page, pushing that page's content down - cascading
+  // through all pages (a new final page is added if needed).
   async function insertVerticalSpace(startPage, yPosition, amount) {
-    // Collect all objects that need to move (on this page and below y)
-    // Then cascade through subsequent pages
+    const BOTTOM_MARGIN = 20; // transfer zone at the bottom of each page
+    const TOP_MARGIN = 20;    // arrivals land this far from the top
+    const ARRIVAL_GAP = 20;   // gap between arrivals and pushed-down content
 
-    saveToUndoStack(startPage);
+    const objBottom = (obj) => obj.top + obj.height * obj.scaleY;
+
+    let carry = []; // { obj, offset } group moving to the next page
 
     for (let pageNum = startPage; pageNum <= totalPages; pageNum++) {
       const canvas = fabricCanvases[pageNum];
-      if (!canvas) continue;
+      if (!canvas) break;
+      if (pageNum > startPage && carry.length === 0) break; // cascade finished
 
-      const pageHeight = canvas.height;
-      const objectsToMove = [];
-      const objectsToOverflow = [];
+      if (!undoStacks[pageNum]) undoStacks[pageNum] = [];
+      saveToUndoStack(pageNum);
 
-      canvas.getObjects().forEach(obj => {
-        if (obj.excludeFromExport) return; // Skip UI elements
+      const limit = canvas.height - BOTTOM_MARGIN;
+      const existing = canvas.getObjects().filter(o => !o.excludeFromExport);
+      const moved = new Set();
 
-        const objTop = obj.top;
-        const objBottom = obj.top + (obj.height * obj.scaleY);
-
-        if (pageNum === startPage) {
-          // On the starting page, only move objects at/below the insertion point
-          if (objTop >= yPosition) {
-            objectsToMove.push(obj);
+      if (pageNum === startPage) {
+        // Objects whose top edge is at/below the insertion point move down.
+        // Strokes straddling the line stay put.
+        existing.forEach(obj => {
+          if (obj.top >= yPosition) {
+            obj.set({ top: obj.top + amount });
+            moved.add(obj);
           }
-        } else {
-          // On subsequent pages, we need to handle overflow from previous page
-          objectsToMove.push(obj);
-        }
-      });
+        });
+      } else {
+        // Place arrivals at the top as a group, preserving relative spacing
+        let arrivalsBottom = TOP_MARGIN;
+        carry.forEach(({ obj, offset }) => {
+          obj.set({ top: TOP_MARGIN + offset });
+          canvas.add(obj);
+          moved.add(obj);
+          arrivalsBottom = Math.max(arrivalsBottom, objBottom(obj));
+        });
+        carry = [];
 
-      // Calculate new positions
-      objectsToMove.forEach(obj => {
-        const shiftAmount = (pageNum === startPage) ? amount : amount; // Could cascade differently
-        const newTop = obj.top + shiftAmount;
-        const objHeight = obj.height * obj.scaleY;
-
-        if (newTop + objHeight > pageHeight) {
-          // Object will overflow to next page
-          objectsToOverflow.push({
-            obj: obj,
-            newTop: newTop - pageHeight // Position on next page
-          });
-        } else {
-          // Object stays on this page
-          obj.set({ top: newTop });
-        }
-      });
-
-      // Handle overflow
-      if (objectsToOverflow.length > 0) {
-        // Ensure next page exists
-        if (pageNum === totalPages) {
-          await addInkPage();
-        }
-
-        const nextCanvas = fabricCanvases[pageNum + 1];
-        if (nextCanvas) {
-          objectsToOverflow.forEach(({ obj, newTop }) => {
-            // Clone the object to the next page
-            obj.clone(function(cloned) {
-              cloned.set({ top: newTop });
-              nextCanvas.add(cloned);
+        // Push existing content down just enough to clear the arrivals
+        if (existing.length > 0) {
+          const existingTop = Math.min(...existing.map(o => o.top));
+          const push = arrivalsBottom + ARRIVAL_GAP - existingTop;
+          if (push > 0) {
+            existing.forEach(obj => {
+              obj.set({ top: obj.top + push });
+              moved.add(obj);
             });
-            // Remove from current page
-            canvas.remove(obj);
-          });
-
-          // The overflow might push objects on the next page down too
-          // This creates a cascade effect
-          amount = objectsToOverflow.length > 0 ? amount : 0;
+          }
         }
       }
 
+      // Moved objects now within BOTTOM_MARGIN of the page bottom transfer
+      // to the next page (objects too tall to ever fit a page stay put)
+      const maxFit = limit - TOP_MARGIN;
+      const overflow = canvas.getObjects()
+        .filter(o => !o.excludeFromExport && moved.has(o) &&
+                     objBottom(o) > limit && (o.height * o.scaleY) <= maxFit)
+        .sort((a, b) => a.top - b.top);
+
+      if (overflow.length > 0) {
+        const groupTop = Math.min(...overflow.map(o => o.top));
+        carry = overflow.map(obj => {
+          canvas.remove(obj);
+          return { obj: obj, offset: obj.top - groupTop };
+        });
+
+        // Extend the document if the cascade reaches past the last page
+        if (pageNum === totalPages) {
+          await addInkPage();
+        }
+      }
+
+      canvas.getObjects().forEach(o => o.setCoords());
       canvas.renderAll();
     }
 
@@ -1745,11 +1832,12 @@
         state && state.objects && state.objects.length > 0
       );
 
-      if (hasAnnotations || totalPages > 1) {
+      if (hasAnnotations || totalPages > 1 || backgroundTemplate !== 'blank') {
         localStorage.setItem(getStateKey(), JSON.stringify({
           canvasStates: canvasStates,
           currentPage: currentPage,
           totalPages: MODE === 'ink' ? totalPages : undefined,
+          backgroundTemplate: MODE === 'ink' ? backgroundTemplate : undefined,
           savedAt: new Date().toISOString()
         }));
       }
@@ -1767,6 +1855,9 @@
       if (result.canvasStates) {
         Object.assign(canvasStates, result.canvasStates);
         if (result.currentPage) currentPage = result.currentPage;
+        if (MODE === 'ink' && result.backgroundTemplate) {
+          backgroundTemplate = result.backgroundTemplate;
+        }
         // Restore totalPages for ink mode
         if (MODE === 'ink' && result.totalPages) {
           totalPages = result.totalPages;
@@ -1787,6 +1878,9 @@
         if (data.canvasStates) {
           Object.assign(canvasStates, data.canvasStates);
           if (data.currentPage) currentPage = data.currentPage;
+          if (MODE === 'ink' && data.backgroundTemplate) {
+            backgroundTemplate = data.backgroundTemplate;
+          }
           // Restore totalPages for ink mode
           if (MODE === 'ink' && data.totalPages) {
             totalPages = data.totalPages;
@@ -1817,7 +1911,8 @@
         body: JSON.stringify({
           canvasStates: canvasStates,
           currentPage: currentPage,
-          totalPages: MODE === 'ink' ? totalPages : undefined
+          totalPages: MODE === 'ink' ? totalPages : undefined,
+          backgroundTemplate: MODE === 'ink' ? backgroundTemplate : undefined
         })
       });
 
@@ -1890,10 +1985,11 @@
     }
   }
 
-  // Close save dropdown when clicking outside
+  // Close dropdowns when clicking outside
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.tool-wrapper')) {
       closeSaveDropdown();
+      closeBgDropdown();
     }
   });
 

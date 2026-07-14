@@ -298,6 +298,44 @@
     .dropdown-section { margin-bottom: 10px; }
     .dropdown-section:last-child { margin-bottom: 0; }
 
+    /* Background template options */
+    .bg-options { display: flex; flex-direction: column; gap: 4px; }
+    .bg-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .bg-option:hover { background: #f3f4f6; }
+    .bg-option.active { background: #eff6ff; }
+    .bg-option span { font-size: 12px; color: #374151; white-space: nowrap; }
+    .bg-preview {
+      width: 44px;
+      height: 30px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .bg-preview-dots {
+      background-image: radial-gradient(circle, #b6c0cd 1px, transparent 1px);
+      background-size: 7px 7px;
+    }
+    .bg-preview-lines-thin {
+      background-image: linear-gradient(to bottom, #d3dae3 1px, transparent 1px);
+      background-size: 100% 7px;
+    }
+    .bg-preview-lines-wide {
+      background-image: linear-gradient(to bottom, #d3dae3 1px, transparent 1px);
+      background-size: 100% 11px;
+    }
+    .bg-preview-grid {
+      background-image: linear-gradient(to bottom, #d3dae3 1px, transparent 1px), linear-gradient(to right, #d3dae3 1px, transparent 1px);
+      background-size: 7px 7px;
+    }
+
     .dropdown-label {
       font-size: 10px;
       color: #6b7280;
@@ -441,16 +479,21 @@
     .ftool-btn.save-btn:hover { background: #16a34a; }
     .ftool-btn.save-btn svg { stroke: white; }
 
-    /* Stylus indicator */
+    /* Stylus indicator - absolutely positioned badge so showing/hiding it
+       never changes the toolbar's width (which shifted the centered toolbar) */
     .stylus-indicator {
+      position: absolute;
+      top: -8px;
+      right: -8px;
       display: flex;
       align-items: center;
-      padding: 4px 8px;
+      justify-content: center;
+      padding: 4px;
       background: #dbeafe;
       color: #1d4ed8;
-      border-radius: 4px;
-      font-size: 11px;
-      gap: 4px;
+      border-radius: 9999px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      pointer-events: none;
     }
 
     .stylus-indicator svg { width: 14px; height: 14px; }
@@ -1122,6 +1165,37 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16M12 8v8m-4-4l4 4 4-4"/>
         </svg>
       </button>
+
+      <!-- Page background template (ink mode only) -->
+      <div class="tool-wrapper">
+        <button id="tool-background" onclick="toggleBgDropdown(event)" class="ftool-btn has-dropdown" title="Page Background">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16v16H4zM4 9h16M4 14h16M9 4v16"/>
+          </svg>
+        </button>
+        <div class="tool-dropdown" id="bg-dropdown">
+          <div class="dropdown-section">
+            <span class="dropdown-label">Background</span>
+            <div class="bg-options">
+              <div class="bg-option active" data-bg="blank" onclick="setPageBackground('blank')">
+                <div class="bg-preview"></div><span>Blank</span>
+              </div>
+              <div class="bg-option" data-bg="dots" onclick="setPageBackground('dots')">
+                <div class="bg-preview bg-preview-dots"></div><span>Dots</span>
+              </div>
+              <div class="bg-option" data-bg="lines-thin" onclick="setPageBackground('lines-thin')">
+                <div class="bg-preview bg-preview-lines-thin"></div><span>Thin lines</span>
+              </div>
+              <div class="bg-option" data-bg="lines-wide" onclick="setPageBackground('lines-wide')">
+                <div class="bg-preview bg-preview-lines-wide"></div><span>Wide lines</span>
+              </div>
+              <div class="bg-option" data-bg="grid" onclick="setPageBackground('grid')">
+                <div class="bg-preview bg-preview-grid"></div><span>Grid</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <% } %>
 
       <div class="toolbar-divider"></div>
