@@ -572,6 +572,23 @@
       display: none;
     }
 
+    /* Save dropdown opens beside a side-docked toolbar, not below it */
+    .floating-toolbar.docked-left .save-dropdown {
+      top: auto;
+      bottom: 8px;
+      left: calc(100% + 8px);
+      right: auto;
+      margin-top: 0;
+    }
+
+    .floating-toolbar.docked-right .save-dropdown {
+      top: auto;
+      bottom: 8px;
+      right: calc(100% + 8px);
+      left: auto;
+      margin-top: 0;
+    }
+
     /* Mobile */
     @media (max-width: 768px) {
       .floating-toolbar {
@@ -1111,15 +1128,6 @@
     </div>
 
     <div class="toolbar-tools">
-      <!-- Page thumbnails sidebar toggle -->
-      <button id="tool-thumbs" onclick="toggleThumbPanel()" class="ftool-btn" title="Page thumbnails">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h6v16H6a2 2 0 01-2-2V6zM12 4h6a2 2 0 012 2v12a2 2 0 01-2 2h-6M7 8h2M7 12h2M7 16h2"/>
-        </svg>
-      </button>
-
-      <div class="toolbar-divider"></div>
-
       <!-- Pen tool -->
       <div class="tool-wrapper">
         <button id="tool-pen" class="ftool-btn has-dropdown active" data-tool="pen" title="Pen">
@@ -1142,14 +1150,14 @@
           <div class="dropdown-section">
             <span class="dropdown-label">Width</span>
             <div class="width-options">
-              <div class="width-option" data-width="2" onclick="setPenWidth(2)">
+              <div class="width-option" data-width="1.6" onclick="setPenWidth(1.6)">
                 <div class="width-line" style="height:2px"></div><span>Thin</span>
               </div>
-              <div class="width-option active" data-width="4" onclick="setPenWidth(4)">
-                <div class="width-line" style="height:4px"></div><span>Medium</span>
+              <div class="width-option active" data-width="3.2" onclick="setPenWidth(3.2)">
+                <div class="width-line" style="height:3px"></div><span>Medium</span>
               </div>
-              <div class="width-option" data-width="8" onclick="setPenWidth(8)">
-                <div class="width-line" style="height:8px"></div><span>Wide</span>
+              <div class="width-option" data-width="6.4" onclick="setPenWidth(6.4)">
+                <div class="width-line" style="height:6px"></div><span>Wide</span>
               </div>
             </div>
           </div>
@@ -1268,6 +1276,13 @@
       <button id="fullscreen-btn" onclick="toggleFullscreen()" class="ftool-btn" title="Full screen">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+        </svg>
+      </button>
+
+      <!-- Page thumbnails sidebar toggle -->
+      <button id="tool-thumbs" onclick="toggleThumbPanel()" class="ftool-btn" title="Page thumbnails">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h6v16H6a2 2 0 01-2-2V6zM12 4h6a2 2 0 012 2v12a2 2 0 01-2 2h-6M7 8h2M7 12h2M7 16h2"/>
         </svg>
       </button>
 

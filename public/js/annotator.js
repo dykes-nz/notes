@@ -33,7 +33,7 @@
   })();
 
   let strokeColor = savedToolSettings.strokeColor || '#000000';
-  let strokeWidth = savedToolSettings.strokeWidth || 4;
+  let strokeWidth = savedToolSettings.strokeWidth || 3.2;
   let highlighterColor = savedToolSettings.highlighterColor || 'rgba(255,255,0,0.4)';
   let highlighterWidth = savedToolSettings.highlighterWidth || 20;
   let currentShape = 'line';
@@ -994,7 +994,7 @@
       line.style.backgroundColor = strokeColor;
     });
     document.querySelectorAll('#pen-dropdown .width-option').forEach(o => {
-      o.classList.toggle('active', parseInt(o.dataset.width) === strokeWidth);
+      o.classList.toggle('active', parseFloat(o.dataset.width) === strokeWidth);
     });
 
     document.querySelectorAll('#highlighter-dropdown .color-swatch').forEach(s => {
@@ -1361,7 +1361,7 @@
   window.setPenWidth = function(width) {
     strokeWidth = width;
     document.querySelectorAll('#pen-dropdown .width-option').forEach(o => {
-      o.classList.toggle('active', parseInt(o.dataset.width) === width);
+      o.classList.toggle('active', parseFloat(o.dataset.width) === width);
     });
 
     Object.values(fabricCanvases).forEach(canvas => {
