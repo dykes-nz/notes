@@ -13,11 +13,32 @@
   <path d="M69.63,16.35c.12-5.47,11.61-5.95,18.01-5.85-7.24,5.56-8.25,12.18-11.64,14.86"/>
 </svg>
 
+<style>
+  /* Suppress iOS long-press link preview so protracted touch can rename */
+  .note-card a { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  /* Drag handle has no hover state on touch devices - keep it faintly visible */
+  @media (hover: none) {
+    .note-drag-handle { opacity: 0.35; }
+  }
+  .title-edit {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    width: 100%;
+    background: rgba(255,255,255,0.85);
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
+    padding: 2px 8px;
+    outline: none;
+  }
+</style>
+
 <div class="mx-auto" style="max-width: calc(100% - 400px); margin: 200px 200px 0 200px;">
   <!-- Notes Grid -->
   <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     ${notes.length === 0 ? `` : notes.map((note, index) => `
-    <div class="note-card bg-white/40 backdrop-blur-sm rounded-xl border border-gray-200 p-4 hover:shadow-lg hover:bg-white/70 transition relative group" draggable="true" data-note-id="${note.id}" data-index="${index}">
+    <div class="note-card bg-white/30 backdrop-blur-sm rounded-xl border border-gray-200 p-4 hover:shadow-lg hover:bg-white/60 transition relative group" draggable="false" data-note-id="${note.id}" data-index="${index}">
       <div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="9" cy="6" r="2"/>
@@ -33,13 +54,6 @@
         ${note.folder_name ? `<span class="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded mb-2">${note.folder_name}</span>` : ''}
         <p class="text-sm text-gray-500">Updated ${new Date(note.updated_at).toLocaleDateString()}</p>
       </a>
-      <button onclick="renameNote(${note.id}, '${(note.title || 'Untitled').replace(/'/g, "\\'")}')"
-              class="absolute top-3 right-12 p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Rename note">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-        </svg>
-      </button>
       <button onclick="confirmDeleteNote(${note.id}, '${(note.title || 'Untitled').replace(/'/g, "\\'")}')"
               class="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
               title="Delete note">
@@ -97,27 +111,95 @@
   var currentFolderId = '${typeof currentFolder !== 'undefined' && currentFolder ? currentFolder.id : ''}';
   var noteToDelete = null;
 
-  function renameNote(noteId, currentTitle) {
-    var newTitle = prompt('Rename note:', currentTitle);
-    if (newTitle === null) return; // cancelled
-    newTitle = newTitle.trim();
-    if (!newTitle || newTitle === currentTitle) return;
+  // Long-press a note card to rename it inline; a quick tap opens the note
+  var LONG_PRESS_MS = 550;
+  var pressTimer = null;
+  var pressStart = null;
+  var suppressClick = false;
 
-    fetch('/note/' + noteId + '/title', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newTitle })
-    }).then(function(r) { return r.json(); })
-      .then(function(result) {
-        if (result.success) {
-          window.location.reload();
-        } else {
-          alert('Failed to rename note: ' + (result.error || 'Unknown error'));
-        }
-      }).catch(function(err) {
-        alert('Failed to rename note: ' + err.message);
-      });
+  function startInlineRename(card) {
+    var noteId = card.dataset.noteId;
+    var h3 = card.querySelector('h3');
+    if (!h3 || h3.querySelector('input')) return;
+
+    var current = h3.textContent;
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'title-edit';
+    input.value = current;
+    h3.textContent = '';
+    h3.appendChild(input);
+    input.focus();
+    input.select();
+
+    var done = false;
+    function finish(save) {
+      if (done) return;
+      done = true;
+      var newTitle = input.value.trim();
+      input.remove();
+
+      if (save && newTitle && newTitle !== current) {
+        h3.textContent = newTitle;
+        fetch('/note/' + noteId + '/title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: newTitle })
+        }).then(function(r) { return r.json(); })
+          .then(function(result) {
+            if (!result.success) throw new Error(result.error || 'Rename failed');
+          }).catch(function(err) {
+            h3.textContent = current;
+            alert('Failed to rename note: ' + err.message);
+          });
+      } else {
+        h3.textContent = current;
+      }
+    }
+
+    input.addEventListener('blur', function() { finish(true); });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      if (e.key === 'Escape') finish(false);
+    });
+    // Interacting with the input must not follow the card link
+    input.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); });
   }
+
+  document.addEventListener('pointerdown', function(e) {
+    var card = e.target.closest('.note-card');
+    if (!card || e.target.closest('button') || e.target.closest('input') || e.target.closest('.note-drag-handle')) return;
+    pressStart = { x: e.clientX, y: e.clientY };
+    pressTimer = setTimeout(function() {
+      pressTimer = null;
+      suppressClick = true;
+      setTimeout(function() { suppressClick = false; }, 600);
+      startInlineRename(card);
+    }, LONG_PRESS_MS);
+  });
+
+  document.addEventListener('pointermove', function(e) {
+    if (pressTimer && pressStart &&
+        (Math.abs(e.clientX - pressStart.x) > 10 || Math.abs(e.clientY - pressStart.y) > 10)) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+  });
+
+  ['pointerup', 'pointercancel'].forEach(function(evt) {
+    document.addEventListener(evt, function() {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    });
+  });
+
+  // Swallow the click that follows a completed long-press
+  document.addEventListener('click', function(e) {
+    if (suppressClick && e.target.closest('.note-card')) {
+      e.preventDefault();
+      e.stopPropagation();
+      suppressClick = false;
+    }
+  }, true);
 
   function confirmDeleteNote(noteId, noteTitle) {
     noteToDelete = noteId;
@@ -225,6 +307,21 @@
   // Drag and drop for note reordering
   var draggedCard = null;
   var dragPlaceholder = null;
+
+  // Dragging starts only from the handle - a long-press elsewhere on the
+  // card is inline rename, not reorder
+  document.addEventListener('pointerdown', function(e) {
+    var handle = e.target.closest('.note-drag-handle');
+    if (handle) {
+      var card = handle.closest('.note-card');
+      if (card) card.draggable = true;
+    }
+  });
+  document.addEventListener('pointerup', function() {
+    document.querySelectorAll('.note-card[draggable="true"]').forEach(function(card) {
+      card.draggable = false;
+    });
+  });
 
   document.querySelectorAll('.note-card').forEach(function(card) {
     card.addEventListener('dragstart', function(e) {
