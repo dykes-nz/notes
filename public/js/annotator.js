@@ -33,7 +33,7 @@
   })();
 
   let strokeColor = savedToolSettings.strokeColor || '#000000';
-  let strokeWidth = savedToolSettings.strokeWidth || 2.88;
+  let strokeWidth = savedToolSettings.strokeWidth || 1.44;
   let highlighterColor = savedToolSettings.highlighterColor || 'rgba(255,255,0,0.4)';
   let highlighterWidth = savedToolSettings.highlighterWidth || 20;
   let currentShape = 'line';
