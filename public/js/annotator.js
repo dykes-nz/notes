@@ -57,8 +57,8 @@
   let tempShape = null;
   let activeShapeCanvas = null;
 
-  // Page background template for blank ink pages
-  let backgroundTemplate = 'blank';
+  // Page background template for blank ink pages (thin lines by default)
+  let backgroundTemplate = 'lines-thin';
 
   // Insert space state
   let isInsertSpaceMode = false;
