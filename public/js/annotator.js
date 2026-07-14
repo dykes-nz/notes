@@ -1971,7 +1971,12 @@
 
     if (transcriptEl) {
       if (fullTranscript) {
-        transcriptEl.innerHTML = '<p>' + fullTranscript + '</p>';
+        // Render each paragraph (split on blank lines) as its own <p>
+        transcriptEl.innerHTML = fullTranscript
+          .split(/\n{2,}/)
+          .filter(p => p.trim())
+          .map(p => '<p>' + p + '</p>')
+          .join('');
       } else {
         transcriptEl.innerHTML = '<p class="transcript-placeholder">Recording transcript will appear here...</p>';
       }
@@ -2055,14 +2060,14 @@
       // Update duration display
       recordingInterval = setInterval(updateDuration, 1000);
 
-      // Every 15 seconds, rotate the recorder so each segment is a complete
+      // Every 10 seconds, rotate the recorder so each segment is a complete
       // standalone file (chunks sliced from one continuous recording lack
       // container headers after the first, and ffmpeg rejects them)
       transcriptionInterval = setInterval(() => {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
           mediaRecorder.stop(); // onstop sends the segment and starts a new one
         }
-      }, 15000);
+      }, 10000);
 
     } catch (err) {
       console.error('Failed to start recording:', err);
@@ -2191,7 +2196,9 @@
       const result = await response.json();
 
       if (result.text) {
-        fullTranscript += (fullTranscript ? ' ' : '') + result.text;
+        // Match server append logic: paragraph break if the chunk began after a pause
+        const separator = fullTranscript ? (result.leadingPause ? '\n\n' : ' ') : '';
+        fullTranscript += separator + result.text;
         updateTranscriptDisplay();
       }
     } catch (err) {

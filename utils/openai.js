@@ -114,16 +114,48 @@ async function transcribeAudio(audioBuffer, mimeType = 'audio/webm') {
       timestamp_granularities: ['segment']
     });
 
-    // Filter out hallucinated text
-    let text = transcription.text || '';
-    if (isHallucination(text)) {
-      console.log('Filtered hallucination:', text);
-      text = '';
+    // Build paragraphs from segment timing: a silence gap of >= 1s between
+    // segments starts a new paragraph (joined with \n\n)
+    const PAUSE_THRESHOLD = 1.0;
+    const segments = transcription.segments || [];
+    let paragraphs = [];
+    let leadingPause = false;
+
+    if (segments.length > 0) {
+      // Chunk starts with >= 1s of silence - caller should break before appending
+      leadingPause = segments[0].start >= PAUSE_THRESHOLD;
+
+      let current = '';
+      let prevEnd = null;
+      for (const seg of segments) {
+        const segText = (seg.text || '').trim();
+        if (!segText) continue;
+        if (current && prevEnd !== null && seg.start - prevEnd >= PAUSE_THRESHOLD) {
+          paragraphs.push(current);
+          current = segText;
+        } else {
+          current = current ? current + ' ' + segText : segText;
+        }
+        prevEnd = seg.end;
+      }
+      if (current) paragraphs.push(current);
+    } else if (transcription.text) {
+      paragraphs = [transcription.text];
     }
 
+    // Filter out hallucinated paragraphs
+    paragraphs = paragraphs.filter(p => {
+      if (isHallucination(p)) {
+        console.log('Filtered hallucination:', p);
+        return false;
+      }
+      return true;
+    });
+
     return {
-      text: text,
-      segments: transcription.segments || [],
+      text: paragraphs.join('\n\n'),
+      leadingPause: leadingPause,
+      segments: segments,
       duration: transcription.duration
     };
   } finally {

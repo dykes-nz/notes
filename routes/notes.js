@@ -276,10 +276,11 @@ router.post('/note/:id/transcribe', requireAuth, audioUpload.single('audio'), as
     const result = await openai.transcribeAudio(req.file.buffer, req.file.mimetype);
 
     if (result.text && result.text.trim()) {
-      // Append to existing transcript
+      // Append to existing transcript; paragraph break if the chunk began after a pause
       const note = await dbGet('SELECT transcript FROM notes WHERE id = ?', [req.params.id]);
       const existingTranscript = note?.transcript || '';
-      const newTranscript = existingTranscript + (existingTranscript ? ' ' : '') + result.text;
+      const separator = existingTranscript ? (result.leadingPause ? '\n\n' : ' ') : '';
+      const newTranscript = existingTranscript + separator + result.text;
 
       await dbRun(
         'UPDATE notes SET transcript = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -290,6 +291,7 @@ router.post('/note/:id/transcribe', requireAuth, audioUpload.single('audio'), as
     res.json({
       success: true,
       text: result.text,
+      leadingPause: result.leadingPause,
       duration: result.duration
     });
   } catch (err) {
