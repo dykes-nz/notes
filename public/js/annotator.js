@@ -424,8 +424,6 @@
       }
     });
 
-    // Setup insert-space handlers
-    setupInsertSpaceHandlers(fabricCanvas, pageNum);
   }
 
   function saveToUndoStack(pageNum) {
@@ -587,7 +585,73 @@
         canvas.selection = false;
         canvas.forEachObject(obj => { obj.selectable = false; });
         break;
+
+      case 'insert-space':
+        canvas.isDrawingMode = false;
+        canvas.defaultCursor = 'row-resize';
+        canvas.selection = false;
+        canvas.forEachObject(obj => { obj.selectable = false; });
+        // Re-attach insert-space handlers (they were removed by canvas.off above)
+        const pageNum = parseInt(canvas.lowerCanvasEl?.id?.replace('annotation-canvas-', '') || '1');
+        attachInsertSpaceHandlers(canvas, pageNum);
+        break;
     }
+  }
+
+  // Attach insert-space mouse handlers to a canvas
+  function attachInsertSpaceHandlers(canvas, pageNum) {
+    canvas.on('mouse:down', function(e) {
+      if (currentTool !== 'insert-space') return;
+
+      const pointer = canvas.getPointer(e.e);
+      insertSpaceStartY = pointer.y;
+      insertSpacePageNum = pageNum;
+
+      // Create a horizontal line at the click point
+      insertSpaceLine = new fabric.Line([0, pointer.y, canvas.width, pointer.y], {
+        stroke: '#3b82f6',
+        strokeWidth: 2,
+        strokeDashArray: [5, 5],
+        selectable: false,
+        evented: false,
+        excludeFromExport: true
+      });
+      canvas.add(insertSpaceLine);
+      canvas.renderAll();
+    });
+
+    canvas.on('mouse:move', function(e) {
+      if (currentTool !== 'insert-space' || !insertSpaceLine) return;
+
+      const pointer = canvas.getPointer(e.e);
+      const newY = pointer.y;
+
+      // Only allow dragging down
+      if (newY > insertSpaceStartY) {
+        insertSpaceLine.set({ y1: newY, y2: newY });
+        canvas.renderAll();
+      }
+    });
+
+    canvas.on('mouse:up', function(e) {
+      if (currentTool !== 'insert-space' || !insertSpaceLine) return;
+
+      const pointer = canvas.getPointer(e.e);
+      const spaceAmount = Math.max(0, pointer.y - insertSpaceStartY);
+
+      // Remove the visual line
+      canvas.remove(insertSpaceLine);
+      insertSpaceLine = null;
+
+      if (spaceAmount > 10) {
+        // Actually insert the space
+        insertVerticalSpace(insertSpacePageNum, insertSpaceStartY, spaceAmount);
+      }
+
+      canvas.renderAll();
+      insertSpaceStartY = 0;
+      insertSpacePageNum = 0;
+    });
   }
 
   // Factory functions for handlers
@@ -710,62 +774,6 @@
     insertSpaceLine = null;
     insertSpaceStartY = 0;
     insertSpacePageNum = 0;
-  }
-
-  // Handle insert space interactions via canvas mouse events
-  function setupInsertSpaceHandlers(canvas, pageNum) {
-    canvas.on('mouse:down', function(e) {
-      if (currentTool !== 'insert-space') return;
-
-      const pointer = canvas.getPointer(e.e);
-      insertSpaceStartY = pointer.y;
-      insertSpacePageNum = pageNum;
-
-      // Create a horizontal line at the click point
-      insertSpaceLine = new fabric.Line([0, pointer.y, canvas.width, pointer.y], {
-        stroke: '#3b82f6',
-        strokeWidth: 2,
-        strokeDashArray: [5, 5],
-        selectable: false,
-        evented: false,
-        excludeFromExport: true
-      });
-      canvas.add(insertSpaceLine);
-      canvas.renderAll();
-    });
-
-    canvas.on('mouse:move', function(e) {
-      if (currentTool !== 'insert-space' || !insertSpaceLine) return;
-
-      const pointer = canvas.getPointer(e.e);
-      const newY = pointer.y;
-
-      // Only allow dragging down
-      if (newY > insertSpaceStartY) {
-        insertSpaceLine.set({ y1: newY, y2: newY });
-        canvas.renderAll();
-      }
-    });
-
-    canvas.on('mouse:up', function(e) {
-      if (currentTool !== 'insert-space' || !insertSpaceLine) return;
-
-      const pointer = canvas.getPointer(e.e);
-      const spaceAmount = Math.max(0, pointer.y - insertSpaceStartY);
-
-      // Remove the visual line
-      canvas.remove(insertSpaceLine);
-      insertSpaceLine = null;
-
-      if (spaceAmount > 10) {
-        // Actually insert the space
-        insertVerticalSpace(insertSpacePageNum, insertSpaceStartY, spaceAmount);
-      }
-
-      canvas.renderAll();
-      insertSpaceStartY = 0;
-      insertSpacePageNum = 0;
-    });
   }
 
   // Insert vertical space by moving objects down and reflowing across pages
@@ -1894,6 +1902,8 @@
   let mediaRecorder = null;
   let currentMimeType = 'audio/webm';
   let audioChunks = [];
+  let audioInitChunk = null; // For Safari fMP4: stores the init segment with headers
+  let isSafariRecording = false;
   let recordingStartTime = null;
   let recordingInterval = null;
   let transcriptionInterval = null;
@@ -2017,11 +2027,17 @@
 
       console.log('Recording with mimeType:', mimeType);
       currentMimeType = mimeType;
+      isSafariRecording = mimeType.includes('mp4') || mimeType.includes('m4a') || mimeType.includes('aac');
       mediaRecorder = new MediaRecorder(stream, { mimeType });
       audioChunks = [];
+      audioInitChunk = null;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
+          // For Safari fMP4, keep the first chunk as init segment (has headers)
+          if (isSafariRecording && audioInitChunk === null) {
+            audioInitChunk = e.data;
+          }
           audioChunks.push(e.data);
         }
       };

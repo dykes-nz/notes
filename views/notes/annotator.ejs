@@ -1071,16 +1071,9 @@
         </svg>
       </button>
 
+      <% if (mode === 'ink') { %>
       <div class="toolbar-divider"></div>
 
-      <!-- Audio recording -->
-      <button id="tool-audio" onclick="toggleAudioPanel()" class="ftool-btn" title="Record Audio">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
-        </svg>
-      </button>
-
-      <% if (mode === 'ink') { %>
       <!-- Add page (ink mode only) -->
       <button id="tool-add-page" onclick="addInkPage()" class="ftool-btn" title="Add Page">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1097,6 +1090,13 @@
       <% } %>
 
       <div class="toolbar-divider"></div>
+
+      <!-- Audio recording -->
+      <button id="tool-audio" onclick="toggleAudioPanel()" class="ftool-btn" title="Record Audio">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+        </svg>
+      </button>
 
       <!-- Save dropdown -->
       <div class="tool-wrapper">
