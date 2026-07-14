@@ -1753,7 +1753,12 @@
       const handleY = rect.top + rect.height / 2;
       const handleX = rect.left + rect.width / 2;
 
-      const topZoneHeight = rect.height;
+      // Zones measured from the safe-area line - the drag clamp stops the
+      // toolbar there, so the top zone must start there too
+      const safeTop = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top')
+      ) || 0;
+      const topZoneHeight = safeTop + rect.height;
       const bottomZoneHeight = rect.height * 3;
 
       toolbar.style.transition = 'all 0.2s ease-out';
@@ -1763,7 +1768,7 @@
       if (handleY < topZoneHeight) {
         clearDockedClasses();
         toolbar.classList.add('docked-top');
-        toolbar.style.top = '0';
+        toolbar.style.top = ''; // CSS places it below the status bar
         toolbar.style.left = '50%';
         toolbar.style.right = 'auto';
         toolbar.style.bottom = 'auto';
