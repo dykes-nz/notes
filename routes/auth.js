@@ -65,8 +65,9 @@ router.get('/passkey/register-options', async (req, res) => {
       attestationType: 'none',
       excludeCredentials: excludeCreds,
       authenticatorSelection: {
-        residentKey: 'required',
-        userVerification: 'required',
+        authenticatorAttachment: 'platform',
+        residentKey: 'preferred',
+        userVerification: 'preferred',
       },
     });
 
