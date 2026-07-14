@@ -25,11 +25,12 @@ router.get('/setup-needed', async (req, res) => {
   let count;
   if (isPostgres) {
     const result = await db.get('SELECT COUNT(*) as count FROM passkey_credentials');
-    count = result?.count || 0;
+    count = parseInt(result?.count, 10) || 0;
   } else {
     const result = db.get('SELECT COUNT(*) as count FROM passkey_credentials');
-    count = result?.count || 0;
+    count = parseInt(result?.count, 10) || 0;
   }
+  console.log('Setup needed check, count:', count, 'setupNeeded:', count === 0);
   res.json({ setupNeeded: count === 0 });
 });
 
