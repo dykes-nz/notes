@@ -1078,6 +1078,70 @@
 
     .ftool-btn.hidden { display: none; }
 
+    /* Exit-without-saving challenge */
+    .exit-confirm-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .exit-confirm-backdrop.hidden { display: none; }
+
+    .exit-confirm-panel {
+      background: #fdf0f0;
+      border: 2px solid #fca5a5;
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+      padding: 28px;
+      width: 100%;
+      max-width: 400px;
+      margin: 0 16px;
+    }
+
+    .exit-confirm-text {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+      color: #7f1d1d;
+      margin-bottom: 24px;
+      line-height: 1.4;
+    }
+
+    .exit-confirm-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .exit-confirm-btn {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 1.1rem;
+      padding: 14px 28px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      min-width: 120px;
+    }
+
+    .exit-confirm-cancel {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .exit-confirm-cancel:active { background: #e5e7eb; }
+
+    .exit-confirm-ok {
+      background: #dc2626;
+      color: white;
+    }
+
+    .exit-confirm-ok:active { background: #b91c1c; }
+
     /* Palm rejection toggle active state */
     .ftool-btn.palm-active {
       background: #3b82f6;
@@ -1396,6 +1460,17 @@
     </svg>
     <span id="audio-fab-duration" class="fab-duration" style="display: none;"></span>
   </button>
+
+  <!-- Exit-without-saving challenge -->
+  <div id="exit-confirm-modal" class="exit-confirm-backdrop hidden" onclick="if (event.target === this) cancelExitWithoutSaving()">
+    <div class="exit-confirm-panel">
+      <p class="exit-confirm-text">Are you sure? Unsaved changes will be lost.</p>
+      <div class="exit-confirm-buttons">
+        <button class="exit-confirm-btn exit-confirm-cancel" onclick="cancelExitWithoutSaving()">Cancel</button>
+        <button class="exit-confirm-btn exit-confirm-ok" onclick="confirmExitWithoutSaving()">OK</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Floating delete button for the active selection -->
   <button id="selection-delete-btn" class="selection-delete-btn" onclick="deleteSelection()">

@@ -2741,9 +2741,16 @@
   };
 
   window.exitWithoutSaving = function() {
-    if (confirm('Are you sure you want to exit without saving? Any unsaved changes will be lost.')) {
-      window.location.href = '/';
-    }
+    closeSaveDropdown();
+    document.getElementById('exit-confirm-modal')?.classList.remove('hidden');
+  };
+
+  window.cancelExitWithoutSaving = function() {
+    document.getElementById('exit-confirm-modal')?.classList.add('hidden');
+  };
+
+  window.confirmExitWithoutSaving = function() {
+    window.location.href = '/';
   };
 
   window.toggleSaveDropdown = function(e) {
