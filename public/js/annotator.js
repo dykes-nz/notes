@@ -160,6 +160,8 @@
       setupScrollListener();
       // Return to where this note was last left
       restoreScrollPosition();
+      // Sharpen nearby pages if the restored zoom is above 100%
+      scheduleResolutionUpdate();
       if (loadingOverlay) {
         loadingOverlay.style.display = 'none';
       }
@@ -339,6 +341,11 @@
       enableRetinaScaling: !isIOSSafari
     });
 
+    // Base (100%) dimensions - the backing store is rescaled on zoom
+    fabricCanvas.__baseWidth = inkPageWidth;
+    fabricCanvas.__baseHeight = inkPageHeight;
+    fabricCanvas.__resScale = 1;
+
     // Restore state if exists
     if (canvasStates[pageNum]) {
       await new Promise(resolve => {
@@ -441,6 +448,11 @@
           enablePointerEvents: true,
           enableRetinaScaling: !isIOSSafari
         });
+
+        // Base (100%) dimensions - the backing store is rescaled on zoom
+        fabricCanvas.__baseWidth = viewport.width;
+        fabricCanvas.__baseHeight = viewport.height;
+        fabricCanvas.__resScale = 1;
 
         // Restore state if exists
         if (canvasStates[pageNum]) {
@@ -588,6 +600,8 @@
         currentPage = closestPage;
         updatePageInfo();
         updateThumbHighlight();
+        // Newly-near pages may need their backing store upgraded
+        scheduleResolutionUpdate();
       }
 
       // Persist the exact scroll position (debounced)
@@ -870,7 +884,7 @@
       insertSpaceRect = new fabric.Rect({
         left: 0,
         top: pointer.y,
-        width: canvas.width,
+        width: canvas.__baseWidth || canvas.width,
         height: 0,
         fill: 'rgba(107, 114, 128, 0.12)',
         stroke: 'rgba(107, 114, 128, 0.35)',
@@ -1264,7 +1278,9 @@
 
       if (!undoStacks[pageNum]) undoStacks[pageNum] = [];
 
-      const limit = canvas.height - BOTTOM_MARGIN;
+      // Page geometry in base coordinates (backing store may be scaled)
+      const baseHeight = canvas.__baseHeight || canvas.height;
+      const limit = baseHeight - BOTTOM_MARGIN;
       const existing = canvas.getObjects().filter(o => !o.excludeFromExport);
       const moved = new Set();
 
@@ -2088,6 +2104,7 @@
             Object.values(fabricCanvases).forEach(canvas => {
               applyToolSettings(canvas);
             });
+            scheduleResolutionUpdate();
           }
         }, 100);
       }
@@ -2129,6 +2146,7 @@
       zoomLevel = Math.min(zoomLevel + 0.25, 3.0);
       applyZoomToAllPages();
       updateZoomDisplay();
+      scheduleResolutionUpdate();
     }
   };
 
@@ -2137,6 +2155,7 @@
       zoomLevel = Math.max(zoomLevel - 0.25, 0.5);
       applyZoomToAllPages();
       updateZoomDisplay();
+      scheduleResolutionUpdate();
     }
   };
 
@@ -2144,13 +2163,86 @@
     zoomLevel = 1.0;
     applyZoomToAllPages();
     updateZoomDisplay();
+    scheduleResolutionUpdate();
   };
+
+  // ============= DYNAMIC CANVAS RESOLUTION =============
+  // Zoom is applied as a CSS transform, which blurs the fixed-resolution
+  // backing store. After zooming (or scrolling to new pages), the pages
+  // near the viewport get their backing store re-rendered at the zoom
+  // factor (capped) so ink stays crisp. Object coordinates are unchanged -
+  // fabric's setZoom handles the mapping.
+  const MAX_RES_SCALE = isIOSSafari ? 2 : 3;
+  let resolutionTimer = null;
+
+  function pageResScale(pageNum) {
+    const canvas = fabricCanvases[pageNum];
+    return (canvas && canvas.__resScale) || 1;
+  }
+
+  function scheduleResolutionUpdate() {
+    clearTimeout(resolutionTimer);
+    resolutionTimer = setTimeout(updateCanvasResolutions, 350);
+  }
+
+  function updateCanvasResolutions() {
+    let changed = false;
+
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      const canvas = fabricCanvases[pageNum];
+      if (!canvas) continue;
+
+      // Only pages near the viewport carry a high-res backing store,
+      // bounding memory use regardless of note length. iOS Safari has a
+      // tight canvas memory budget - upgrade the current page only there.
+      const nearWindow = isIOSSafari ? 0 : 1;
+      const near = Math.abs(pageNum - currentPage) <= nearWindow;
+      const target = near ? Math.min(Math.max(zoomLevel, 1), MAX_RES_SCALE) : 1;
+      const current = canvas.__resScale || 1;
+
+      if (Math.abs(target - current) < 0.25) continue;
+      setCanvasResolution(pageNum, target);
+      changed = true;
+    }
+
+    if (changed) {
+      applyZoomToAllPages();
+    }
+  }
+
+  function setCanvasResolution(pageNum, scale) {
+    const canvas = fabricCanvases[pageNum];
+    const container = pageContainers[pageNum];
+    if (!canvas || !container) return;
+
+    const w = Math.round(canvas.__baseWidth * scale);
+    const h = Math.round(canvas.__baseHeight * scale);
+
+    canvas.__resScale = scale;
+    canvas.setDimensions({ width: w, height: h });
+    canvas.setZoom(scale);
+    canvas.calcOffset();
+
+    container.style.width = w + 'px';
+    container.style.height = h + 'px';
+
+    // Keep a PDF background canvas aligned (bitmap CSS-scaled; the ink
+    // above it is what gets the true resolution boost)
+    const pdfCanvas = container.querySelector('.pdf-canvas');
+    if (pdfCanvas) {
+      pdfCanvas.style.width = w + 'px';
+      pdfCanvas.style.height = h + 'px';
+    }
+
+    canvas.requestRenderAll();
+  }
 
   function applyZoomToPage(pageNum) {
     const actualScale = fitScale * zoomLevel;
     const container = pageContainers[pageNum];
     if (container) {
-      container.style.transform = 'scale(' + actualScale + ')';
+      // The backing store already carries resScale - CSS covers the rest
+      container.style.transform = 'scale(' + (actualScale / pageResScale(pageNum)) + ')';
       container.style.transformOrigin = 'top left';
     }
   }
@@ -2159,29 +2251,27 @@
     const actualScale = fitScale * zoomLevel;
     const viewer = document.getElementById('canvas-viewer');
 
-    Object.values(pageContainers).forEach(container => {
-      container.style.transform = 'scale(' + actualScale + ')';
-      container.style.transformOrigin = 'top left';
-    });
+    Object.keys(pageContainers).forEach(k => applyZoomToPage(parseInt(k)));
 
-    if (pageContainers[1]) {
-      const firstCanvas = fabricCanvases[1];
-      if (firstCanvas) {
-        const scaledHeight = firstCanvas.height * actualScale;
-        const originalHeight = firstCanvas.height;
-        const scaledWidth = firstCanvas.width * actualScale;
-        const originalWidth = firstCanvas.width;
+    const firstCanvas = fabricCanvases[1];
+    if (pageContainers[1] && firstCanvas) {
+      const baseW = firstCanvas.__baseWidth || firstCanvas.width;
+      const baseH = firstCanvas.__baseHeight || firstCanvas.height;
+      const scaledWidth = baseW * actualScale;
+      const scaledHeight = baseH * actualScale;
 
-        const viewerWidth = viewer.clientWidth;
-        const leftPadding = Math.max(16, (viewerWidth - scaledWidth) / 2);
-        pagesWrapper.style.paddingLeft = leftPadding + 'px';
-        pagesWrapper.style.paddingRight = '16px';
+      const viewerWidth = viewer.clientWidth;
+      const leftPadding = Math.max(16, (viewerWidth - scaledWidth) / 2);
+      pagesWrapper.style.paddingLeft = leftPadding + 'px';
+      pagesWrapper.style.paddingRight = '16px';
 
-        Object.values(pageContainers).forEach(container => {
-          container.style.marginBottom = ((scaledHeight - originalHeight) + 20) + 'px';
-          container.style.marginRight = Math.max(0, (scaledWidth - originalWidth)) + 'px';
-        });
-      }
+      Object.keys(pageContainers).forEach(k => {
+        const pageNum = parseInt(k);
+        const container = pageContainers[pageNum];
+        const res = pageResScale(pageNum);
+        container.style.marginBottom = ((scaledHeight - baseH * res) + 20) + 'px';
+        container.style.marginRight = Math.max(0, scaledWidth - baseW * res) + 'px';
+      });
     }
   }
 
