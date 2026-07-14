@@ -719,6 +719,13 @@
 
   // ============= FULLSCREEN =============
 
+  // Hide the fullscreen button when running as a Home Screen web app -
+  // there is no browser chrome to escape from
+  if (window.navigator.standalone === true ||
+      window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches) {
+    document.getElementById('fullscreen-btn')?.classList.add('hidden');
+  }
+
   window.toggleFullscreen = function() {
     const doc = document;
     const el = doc.documentElement;
