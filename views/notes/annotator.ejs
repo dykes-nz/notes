@@ -94,6 +94,10 @@
     /* Select mode */
     #canvas-viewer.select-mode .upper-canvas { cursor: default !important; }
 
+    /* Insert space mode */
+    #canvas-viewer.insert-space-mode { cursor: row-resize; }
+    #canvas-viewer.insert-space-mode .upper-canvas { cursor: row-resize !important; }
+
     /* Floating toolbar */
     .floating-toolbar {
       position: fixed;
@@ -1131,6 +1135,13 @@
       <button id="tool-add-page" onclick="addInkPage()" class="ftool-btn" title="Add Page">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+      </button>
+
+      <!-- Insert space (ink mode only) -->
+      <button id="tool-insert-space" onclick="setTool('insert-space')" class="ftool-btn" data-tool="insert-space" title="Insert Space (drag down to push content)">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16M12 8v8m-4-4l4 4 4-4"/>
         </svg>
       </button>
       <% } %>

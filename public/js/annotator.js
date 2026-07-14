@@ -40,6 +40,12 @@
   let tempShape = null;
   let activeShapeCanvas = null;
 
+  // Insert space state
+  let isInsertSpaceMode = false;
+  let insertSpaceLine = null;
+  let insertSpaceStartY = 0;
+  let insertSpacePageNum = 0;
+
   // Per-page containers and Fabric.js canvases
   const pageContainers = {};
   const fabricCanvases = {};
@@ -417,6 +423,9 @@
         fabricCanvas.renderAll();
       }
     });
+
+    // Setup insert-space handlers
+    setupInsertSpaceHandlers(fabricCanvas, pageNum);
   }
 
   function saveToUndoStack(pageNum) {
@@ -470,6 +479,11 @@
       tool = eraserMode;
     }
 
+    // Exit insert-space mode if switching to another tool
+    if (currentTool === 'insert-space' && tool !== 'insert-space') {
+      exitInsertSpaceMode();
+    }
+
     currentTool = tool;
 
     // Update UI - tool buttons
@@ -477,7 +491,8 @@
       const btnTool = btn.dataset.tool;
       const isActive = btnTool === tool ||
         (btnTool === 'eraser' && (tool === 'eraser' || tool === 'eraser-precision')) ||
-        (btnTool === 'shape' && tool === 'shape');
+        (btnTool === 'shape' && tool === 'shape') ||
+        (btnTool === 'insert-space' && tool === 'insert-space');
       btn.classList.toggle('active', isActive);
     });
 
@@ -487,6 +502,12 @@
     if (editorContent) {
       editorContent.classList.toggle('select-mode', tool === 'select');
       editorContent.classList.toggle('pan-mode', tool === 'pan');
+      editorContent.classList.toggle('insert-space-mode', tool === 'insert-space');
+    }
+
+    // Enter insert-space mode
+    if (tool === 'insert-space') {
+      enterInsertSpaceMode();
     }
 
     // Apply to ALL canvases
@@ -666,6 +687,168 @@
       }
       canvas.renderAll();
     };
+  }
+
+  // ============= INSERT SPACE TOOL =============
+
+  function enterInsertSpaceMode() {
+    isInsertSpaceMode = true;
+    // Disable drawing on all canvases
+    Object.values(fabricCanvases).forEach(canvas => {
+      canvas.isDrawingMode = false;
+      canvas.selection = false;
+    });
+  }
+
+  function exitInsertSpaceMode() {
+    isInsertSpaceMode = false;
+    // Remove any existing insert line
+    if (insertSpaceLine && insertSpacePageNum && fabricCanvases[insertSpacePageNum]) {
+      fabricCanvases[insertSpacePageNum].remove(insertSpaceLine);
+      fabricCanvases[insertSpacePageNum].renderAll();
+    }
+    insertSpaceLine = null;
+    insertSpaceStartY = 0;
+    insertSpacePageNum = 0;
+  }
+
+  // Handle insert space interactions via canvas mouse events
+  function setupInsertSpaceHandlers(canvas, pageNum) {
+    canvas.on('mouse:down', function(e) {
+      if (currentTool !== 'insert-space') return;
+
+      const pointer = canvas.getPointer(e.e);
+      insertSpaceStartY = pointer.y;
+      insertSpacePageNum = pageNum;
+
+      // Create a horizontal line at the click point
+      insertSpaceLine = new fabric.Line([0, pointer.y, canvas.width, pointer.y], {
+        stroke: '#3b82f6',
+        strokeWidth: 2,
+        strokeDashArray: [5, 5],
+        selectable: false,
+        evented: false,
+        excludeFromExport: true
+      });
+      canvas.add(insertSpaceLine);
+      canvas.renderAll();
+    });
+
+    canvas.on('mouse:move', function(e) {
+      if (currentTool !== 'insert-space' || !insertSpaceLine) return;
+
+      const pointer = canvas.getPointer(e.e);
+      const newY = pointer.y;
+
+      // Only allow dragging down
+      if (newY > insertSpaceStartY) {
+        insertSpaceLine.set({ y1: newY, y2: newY });
+        canvas.renderAll();
+      }
+    });
+
+    canvas.on('mouse:up', function(e) {
+      if (currentTool !== 'insert-space' || !insertSpaceLine) return;
+
+      const pointer = canvas.getPointer(e.e);
+      const spaceAmount = Math.max(0, pointer.y - insertSpaceStartY);
+
+      // Remove the visual line
+      canvas.remove(insertSpaceLine);
+      insertSpaceLine = null;
+
+      if (spaceAmount > 10) {
+        // Actually insert the space
+        insertVerticalSpace(insertSpacePageNum, insertSpaceStartY, spaceAmount);
+      }
+
+      canvas.renderAll();
+      insertSpaceStartY = 0;
+      insertSpacePageNum = 0;
+    });
+  }
+
+  // Insert vertical space by moving objects down and reflowing across pages
+  async function insertVerticalSpace(startPage, yPosition, amount) {
+    // Collect all objects that need to move (on this page and below y)
+    // Then cascade through subsequent pages
+
+    saveToUndoStack(startPage);
+
+    for (let pageNum = startPage; pageNum <= totalPages; pageNum++) {
+      const canvas = fabricCanvases[pageNum];
+      if (!canvas) continue;
+
+      const pageHeight = canvas.height;
+      const objectsToMove = [];
+      const objectsToOverflow = [];
+
+      canvas.getObjects().forEach(obj => {
+        if (obj.excludeFromExport) return; // Skip UI elements
+
+        const objTop = obj.top;
+        const objBottom = obj.top + (obj.height * obj.scaleY);
+
+        if (pageNum === startPage) {
+          // On the starting page, only move objects at/below the insertion point
+          if (objTop >= yPosition) {
+            objectsToMove.push(obj);
+          }
+        } else {
+          // On subsequent pages, we need to handle overflow from previous page
+          objectsToMove.push(obj);
+        }
+      });
+
+      // Calculate new positions
+      objectsToMove.forEach(obj => {
+        const shiftAmount = (pageNum === startPage) ? amount : amount; // Could cascade differently
+        const newTop = obj.top + shiftAmount;
+        const objHeight = obj.height * obj.scaleY;
+
+        if (newTop + objHeight > pageHeight) {
+          // Object will overflow to next page
+          objectsToOverflow.push({
+            obj: obj,
+            newTop: newTop - pageHeight // Position on next page
+          });
+        } else {
+          // Object stays on this page
+          obj.set({ top: newTop });
+        }
+      });
+
+      // Handle overflow
+      if (objectsToOverflow.length > 0) {
+        // Ensure next page exists
+        if (pageNum === totalPages) {
+          await addInkPage();
+        }
+
+        const nextCanvas = fabricCanvases[pageNum + 1];
+        if (nextCanvas) {
+          objectsToOverflow.forEach(({ obj, newTop }) => {
+            // Clone the object to the next page
+            obj.clone(function(cloned) {
+              cloned.set({ top: newTop });
+              nextCanvas.add(cloned);
+            });
+            // Remove from current page
+            canvas.remove(obj);
+          });
+
+          // The overflow might push objects on the next page down too
+          // This creates a cascade effect
+          amount = objectsToOverflow.length > 0 ? amount : 0;
+        }
+      }
+
+      canvas.renderAll();
+    }
+
+    // Save state
+    saveState();
+    updateUndoRedoButtons();
   }
 
   // ============= DROPDOWN CONTROLS =============
