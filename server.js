@@ -80,6 +80,13 @@ app.use((req, res, next) => {
   next();
 });
 
+// Asset version for cache-busting (changes on each deploy/restart)
+const ASSET_VERSION = Date.now().toString(36);
+app.use((req, res, next) => {
+  res.locals.assetVersion = ASSET_VERSION;
+  next();
+});
+
 // Rate limiting
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
