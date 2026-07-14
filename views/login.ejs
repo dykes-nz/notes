@@ -29,7 +29,7 @@
 <body class="bg-random min-h-screen flex items-center justify-center">
   <div class="text-center p-8 w-full max-w-md mx-4">
     <!-- Quill and book SVG - clickable login button -->
-    <button type="button" id="passkey-btn" onclick="<%= setupNeeded ? 'setupPasskey()' : 'loginWithPasskey()' %>"
+    <button type="button" id="passkey-btn" onclick="handlePasskey()"
             class="focus:outline-none transition-transform hover:scale-105 active:scale-95">
       <svg class="w-48 h-48 mx-auto" viewBox="0 0 92.69 75.53" fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
         <path d="M48.99,65.62c-7.6-14.01-17.33-18.52-28.96-22.13l14.96-24.21c5.03.08,7.28,1.21,10.19,4.91"/>
@@ -58,6 +58,23 @@
       statusEl.style.color = '#dc2626';
       passkeyBtn.disabled = true;
       passkeyBtn.style.opacity = '0.5';
+    }
+
+    // Dynamic handler that checks setup status first
+    async function handlePasskey() {
+      try {
+        var res = await fetch('/auth/setup-needed');
+        var data = await res.json();
+        if (data.setupNeeded) {
+          await setupPasskey();
+        } else {
+          await loginWithPasskey();
+        }
+      } catch (err) {
+        console.error('Error checking setup status:', err);
+        statusEl.textContent = 'Error: ' + err.message;
+        statusEl.style.color = '#dc2626';
+      }
     }
 
     // Base64url conversion utilities
