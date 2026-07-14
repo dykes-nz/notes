@@ -2430,7 +2430,15 @@
     if (e) e.stopPropagation();
     const dropdown = document.getElementById('save-dropdown');
     if (dropdown) {
+      const opening = !dropdown.classList.contains('open');
       dropdown.classList.toggle('open');
+      if (opening) {
+        // Track the save button beside a side-docked toolbar,
+        // same as the tool dropdowns
+        positionDropdown(document.getElementById('save-btn'), dropdown);
+      } else {
+        dropdown.style.cssText = '';
+      }
     }
   };
 
@@ -2438,6 +2446,7 @@
     const dropdown = document.getElementById('save-dropdown');
     if (dropdown) {
       dropdown.classList.remove('open');
+      dropdown.style.cssText = '';
     }
   }
 

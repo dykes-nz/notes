@@ -572,22 +572,8 @@
       display: none;
     }
 
-    /* Save dropdown opens beside a side-docked toolbar, not below it */
-    .floating-toolbar.docked-left .save-dropdown {
-      top: auto;
-      bottom: 8px;
-      left: calc(100% + 8px);
-      right: auto;
-      margin-top: 0;
-    }
-
-    .floating-toolbar.docked-right .save-dropdown {
-      top: auto;
-      bottom: 8px;
-      right: calc(100% + 8px);
-      left: auto;
-      margin-top: 0;
-    }
+    /* Side-docked save dropdown is positioned by positionDropdown(),
+       tracking its button like the tool dropdowns */
 
     /* Mobile */
     @media (max-width: 768px) {
