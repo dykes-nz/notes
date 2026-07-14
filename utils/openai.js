@@ -8,6 +8,11 @@ const OpenAI = require('openai');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegStatic = require('ffmpeg-static');
+
+// Set ffmpeg path
+ffmpeg.setFfmpegPath(ffmpegStatic);
 
 let openai = null;
 
@@ -22,6 +27,21 @@ function getClient() {
     });
   }
   return openai;
+}
+
+/**
+ * Convert audio to mp3 format using ffmpeg
+ */
+function convertToMp3(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .toFormat('mp3')
+      .audioCodec('libmp3lame')
+      .audioBitrate('128k')
+      .on('end', () => resolve())
+      .on('error', (err) => reject(err))
+      .save(outputPath);
+  });
 }
 
 /**
@@ -53,7 +73,9 @@ async function transcribeAudio(audioBuffer, mimeType = 'audio/webm') {
 
   console.log('Transcribing audio:', { mimeType, baseMime, ext, bufferSize: audioBuffer.length });
 
-  const tempPath = path.join(os.tmpdir(), `whisper-${Date.now()}.${ext}`);
+  const timestamp = Date.now();
+  const tempInputPath = path.join(os.tmpdir(), `whisper-input-${timestamp}.${ext}`);
+  const tempOutputPath = path.join(os.tmpdir(), `whisper-output-${timestamp}.mp3`);
 
   // Common Whisper hallucinations to filter out
   const HALLUCINATION_PATTERNS = [
@@ -76,10 +98,16 @@ async function transcribeAudio(audioBuffer, mimeType = 'audio/webm') {
   }
 
   try {
-    fs.writeFileSync(tempPath, audioBuffer);
+    // Write input file
+    fs.writeFileSync(tempInputPath, audioBuffer);
+
+    // Convert to mp3 to ensure compatibility
+    console.log('Converting audio to mp3...');
+    await convertToMp3(tempInputPath, tempOutputPath);
+    console.log('Audio conversion complete');
 
     const transcription = await client.audio.transcriptions.create({
-      file: fs.createReadStream(tempPath),
+      file: fs.createReadStream(tempOutputPath),
       model: 'whisper-1',
       language: 'en',
       response_format: 'verbose_json',
@@ -99,9 +127,14 @@ async function transcribeAudio(audioBuffer, mimeType = 'audio/webm') {
       duration: transcription.duration
     };
   } finally {
-    // Clean up temp file
+    // Clean up temp files
     try {
-      fs.unlinkSync(tempPath);
+      fs.unlinkSync(tempInputPath);
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+    try {
+      fs.unlinkSync(tempOutputPath);
     } catch (e) {
       // Ignore cleanup errors
     }

@@ -1724,7 +1724,7 @@
   // ============= STATE SAVE/RESTORE =============
 
   function getStateKey() {
-    return 'annotator-state-' + NOTE_ID + '-' + BLOCK_ID;
+    return 'annotator-state-' + NOTE_ID;
   }
 
   function saveState() {

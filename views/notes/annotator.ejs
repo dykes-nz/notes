@@ -1035,56 +1035,6 @@
 
       <div class="toolbar-divider"></div>
 
-      <!-- Shape tool -->
-      <div class="tool-wrapper">
-        <button id="tool-shape" class="ftool-btn has-dropdown" data-tool="shape" onclick="setTool('shape')" title="Shapes">
-          <svg id="shape-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <line x1="5" y1="19" x2="19" y2="5" stroke-width="2"/>
-          </svg>
-        </button>
-        <div class="tool-dropdown" id="shape-dropdown">
-          <div class="dropdown-section">
-            <span class="dropdown-label">Shape</span>
-            <div class="option-grid">
-              <button class="option-btn active" data-shape="line" onclick="setShape('line')" title="Line">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="5" y1="19" x2="19" y2="5" stroke-width="2"/></svg>
-              </button>
-              <button class="option-btn" data-shape="dashed" onclick="setShape('dashed')" title="Dashed">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="5" y1="19" x2="19" y2="5" stroke-width="2" stroke-dasharray="4,3"/></svg>
-              </button>
-              <button class="option-btn" data-shape="rect" onclick="setShape('rect')" title="Rectangle">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" stroke-width="2"/></svg>
-              </button>
-              <button class="option-btn" data-shape="circle" onclick="setShape('circle')" title="Circle">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke-width="2"/></svg>
-              </button>
-              <button class="option-btn" data-shape="triangle" onclick="setShape('triangle')" title="Triangle">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12,4 4,20 20,20" stroke-width="2"/></svg>
-              </button>
-              <button class="option-btn" data-shape="star" onclick="setShape('star')" title="Star">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9" stroke-width="1.5"/></svg>
-              </button>
-            </div>
-          </div>
-          <div class="dropdown-section">
-            <span class="dropdown-label">Color</span>
-            <div class="color-picker-wrap">
-              <div class="color-swatch active" style="background:#000000" data-color="#000000" onclick="setShapeColor('#000000')"></div>
-              <div class="color-swatch" style="background:#ef4444" data-color="#ef4444" onclick="setShapeColor('#ef4444')"></div>
-              <div class="color-swatch" style="background:#3b82f6" data-color="#3b82f6" onclick="setShapeColor('#3b82f6')"></div>
-              <div class="color-swatch" style="background:#22c55e" data-color="#22c55e" onclick="setShapeColor('#22c55e')"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Text tool -->
-      <button id="tool-text" class="ftool-btn" data-tool="text" onclick="setTool('text')" title="Text">
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <text x="6" y="18" font-size="18" font-weight="bold" font-family="Arial">T</text>
-        </svg>
-      </button>
-
       <!-- Select tool -->
       <button id="tool-select" class="ftool-btn" data-tool="select" onclick="setTool('select')" title="Select">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
