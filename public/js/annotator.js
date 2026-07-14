@@ -171,6 +171,61 @@
   fabric.SmoothPencilBrush = fabric.util.createClass(fabric.PencilBrush, {
     decimate: 1,
 
+    // Capture high-frequency coalesced pointer samples (Apple Pencil
+    // reports 240Hz; browsers deliver ~60 events/s with the rest
+    // batched on the event). Each sample is fed through the normal
+    // move handler so the live stroke and final path stay identical.
+    onMouseMove: function(pointer, options) {
+      const e = options && options.e;
+      if (e && e.getCoalescedEvents) {
+        const events = e.getCoalescedEvents();
+        if (events.length > 1) {
+          for (let i = 0; i < events.length; i++) {
+            const p = this.canvas.getPointer(events[i]);
+            this.callSuper('onMouseMove', new fabric.Point(p.x, p.y), options);
+          }
+          return;
+        }
+      }
+      this.callSuper('onMouseMove', pointer, options);
+    },
+
+    // Same as PencilBrush._finalizeAndAddPath, except the live stroke on
+    // the top context is kept until the final path has been painted on
+    // the main canvas - removes the one-frame flash at pen lift
+    _finalizeAndAddPath: function() {
+      const ctx = this.canvas.contextTop;
+      ctx.closePath();
+      if (this.decimate) {
+        this._points = this.decimatePoints(this._points, this.decimate);
+      }
+      const pathData = this.convertPointsToSVGPath(this._points).join('');
+      if (!pathData || this._points.length < 2) {
+        this.canvas.clearContext(this.canvas.contextTop);
+        this.canvas.requestRenderAll();
+        return;
+      }
+
+      const path = this.createPath(pathData);
+      const canvas = this.canvas;
+
+      canvas.fire('before:path:created', { path: path });
+      canvas.add(path);
+      path.setCoords();
+      this._resetShadow();
+
+      // Clear the live stroke only after the next full render has drawn
+      // the final path underneath it
+      const clearTop = function() {
+        canvas.off('after:render', clearTop);
+        canvas.clearContext(canvas.contextTop);
+      };
+      canvas.on('after:render', clearTop);
+      canvas.requestRenderAll();
+
+      canvas.fire('path:created', { path: path });
+    },
+
     convertPointsToSVGPath: function(points) {
       const smoothedPoints = this._smoothPoints(points);
       return this._createSmoothPath(smoothedPoints);
