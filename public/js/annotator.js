@@ -121,9 +121,8 @@
       setupEventListeners();
       setupToolbarDrag();
       setupDropdowns();
-      if (MODE === 'pdf') {
-        setupScrollListener();
-      }
+      // Enable scroll tracking for multi-page documents
+      setupScrollListener();
       if (loadingOverlay) {
         loadingOverlay.style.display = 'none';
       }
@@ -188,38 +187,55 @@
 
   // ============= BLANK CANVAS RENDERING =============
 
+  // Fixed page dimensions for ink mode (A4-like proportions)
+  let inkPageWidth = 0;
+  let inkPageHeight = 0;
+
+  function calculateInkPageDimensions() {
+    const viewer = document.getElementById('canvas-viewer');
+    // Use A4 proportions (1:1.414) with a comfortable width
+    inkPageWidth = Math.max(viewer.clientWidth - 32, 800) * renderScale;
+    inkPageHeight = inkPageWidth * 1.414; // A4 aspect ratio
+  }
+
   async function renderBlankCanvas() {
     pagesWrapper.innerHTML = '';
+    calculateInkPageDimensions();
 
-    // Create a canvas sized for the viewport
-    const viewer = document.getElementById('canvas-viewer');
-    const width = Math.max(viewer.clientWidth - 32, 800) * renderScale;
-    const height = Math.max(viewer.clientHeight - 32, 600) * renderScale;
+    // Render all ink pages
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      await renderSingleInkPage(pageNum);
+    }
 
+    updateUndoRedoButtons();
+  }
+
+  async function renderSingleInkPage(pageNum) {
     const pageContainer = document.createElement('div');
     pageContainer.className = 'page-container';
-    pageContainer.id = 'page-container-1';
-    pageContainer.dataset.page = 1;
-    pageContainer.style.width = width + 'px';
-    pageContainer.style.height = height + 'px';
+    pageContainer.id = 'page-container-' + pageNum;
+    pageContainer.dataset.page = pageNum;
+    pageContainer.style.width = inkPageWidth + 'px';
+    pageContainer.style.height = inkPageHeight + 'px';
     pageContainer.style.position = 'relative';
     pageContainer.style.background = 'white';
+    pageContainer.style.marginBottom = '20px';
 
     const annotationCanvas = document.createElement('canvas');
-    annotationCanvas.id = 'annotation-canvas-1';
+    annotationCanvas.id = 'annotation-canvas-' + pageNum;
     annotationCanvas.className = 'annotation-canvas';
-    annotationCanvas.width = width;
-    annotationCanvas.height = height;
+    annotationCanvas.width = inkPageWidth;
+    annotationCanvas.height = inkPageHeight;
     pageContainer.appendChild(annotationCanvas);
 
     pagesWrapper.appendChild(pageContainer);
-    pageContainers[1] = pageContainer;
+    pageContainers[pageNum] = pageContainer;
 
     // Initialize Fabric.js canvas
     const fabricCanvas = new fabric.Canvas(annotationCanvas, {
       isDrawingMode: true,
-      width: width,
-      height: height,
+      width: inkPageWidth,
+      height: inkPageHeight,
       selection: false,
       allowTouchScrolling: false,
       enablePointerEvents: true,
@@ -227,21 +243,39 @@
     });
 
     // Restore state if exists
-    if (canvasStates[1]) {
+    if (canvasStates[pageNum]) {
       await new Promise(resolve => {
-        fabricCanvas.loadFromJSON(canvasStates[1], resolve);
+        fabricCanvas.loadFromJSON(canvasStates[pageNum], resolve);
       });
     }
 
     // Initialize undo/redo stacks
-    if (!undoStacks[1]) undoStacks[1] = [];
-    if (!redoStacks[1]) redoStacks[1] = [];
+    if (!undoStacks[pageNum]) undoStacks[pageNum] = [];
+    if (!redoStacks[pageNum]) redoStacks[pageNum] = [];
 
-    setupCanvasHandlers(fabricCanvas, 1, pageContainer);
-    fabricCanvases[1] = fabricCanvas;
+    setupCanvasHandlers(fabricCanvas, pageNum, pageContainer);
+    fabricCanvases[pageNum] = fabricCanvas;
     applyToolSettings(fabricCanvas);
-    updateUndoRedoButtons();
   }
+
+  // Add a new ink page
+  window.addInkPage = async function() {
+    if (MODE !== 'ink') return;
+
+    totalPages++;
+    await renderSingleInkPage(totalPages);
+    applyZoomToPage(totalPages);
+    updatePageInfo();
+
+    // Scroll to new page
+    const container = pageContainers[totalPages];
+    if (container) {
+      container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Auto-save
+    saveState();
+  };
 
   // ============= PDF RENDERING =============
 
@@ -1386,6 +1420,15 @@
     updateZoomDisplay();
   };
 
+  function applyZoomToPage(pageNum) {
+    const actualScale = fitScale * zoomLevel;
+    const container = pageContainers[pageNum];
+    if (container) {
+      container.style.transform = 'scale(' + actualScale + ')';
+      container.style.transformOrigin = 'top left';
+    }
+  }
+
   function applyZoomToAllPages() {
     const actualScale = fitScale * zoomLevel;
     const viewer = document.getElementById('canvas-viewer');
@@ -1427,10 +1470,10 @@
 
   function updatePageInfo() {
     if (pageInfo) {
-      if (MODE === 'ink') {
-        pageInfo.textContent = '';
-      } else {
+      if (totalPages > 1 || MODE === 'pdf') {
         pageInfo.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+      } else {
+        pageInfo.textContent = '';
       }
     }
   }
@@ -1511,10 +1554,11 @@
         state && state.objects && state.objects.length > 0
       );
 
-      if (hasAnnotations) {
+      if (hasAnnotations || totalPages > 1) {
         localStorage.setItem(getStateKey(), JSON.stringify({
           canvasStates: canvasStates,
           currentPage: currentPage,
+          totalPages: MODE === 'ink' ? totalPages : undefined,
           savedAt: new Date().toISOString()
         }));
       }
@@ -1532,6 +1576,16 @@
       if (result.canvasStates) {
         Object.assign(canvasStates, result.canvasStates);
         if (result.currentPage) currentPage = result.currentPage;
+        // Restore totalPages for ink mode
+        if (MODE === 'ink' && result.totalPages) {
+          totalPages = result.totalPages;
+        } else if (MODE === 'ink') {
+          // Infer totalPages from canvasStates keys
+          const pageNums = Object.keys(result.canvasStates).map(k => parseInt(k)).filter(n => !isNaN(n));
+          if (pageNums.length > 0) {
+            totalPages = Math.max(...pageNums);
+          }
+        }
         return;
       }
 
@@ -1542,6 +1596,15 @@
         if (data.canvasStates) {
           Object.assign(canvasStates, data.canvasStates);
           if (data.currentPage) currentPage = data.currentPage;
+          // Restore totalPages for ink mode
+          if (MODE === 'ink' && data.totalPages) {
+            totalPages = data.totalPages;
+          } else if (MODE === 'ink') {
+            const pageNums = Object.keys(data.canvasStates).map(k => parseInt(k)).filter(n => !isNaN(n));
+            if (pageNums.length > 0) {
+              totalPages = Math.max(...pageNums);
+            }
+          }
         }
       }
     } catch (e) {
@@ -1562,7 +1625,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           canvasStates: canvasStates,
-          currentPage: currentPage
+          currentPage: currentPage,
+          totalPages: MODE === 'ink' ? totalPages : undefined
         })
       });
 

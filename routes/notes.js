@@ -232,10 +232,15 @@ router.delete('/note/:id', requireAuth, deleteNote);
 
 // Save canvas state
 router.post('/note/:id/canvas', requireAuth, async (req, res) => {
-  const { canvasStates, currentPage } = req.body;
+  const { canvasStates, currentPage, totalPages } = req.body;
+  // Store totalPages in the canvasStates object under a meta key
+  const stateToSave = { ...canvasStates };
+  if (totalPages) {
+    stateToSave._meta = { totalPages };
+  }
   await dbRun(
     'UPDATE notes SET canvas_states = ?, current_page = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [JSON.stringify(canvasStates || {}), currentPage || 1, req.params.id]
+    [JSON.stringify(stateToSave), currentPage || 1, req.params.id]
   );
   res.json({ success: true });
 });
@@ -243,9 +248,17 @@ router.post('/note/:id/canvas', requireAuth, async (req, res) => {
 // Get canvas state
 router.get('/note/:id/canvas', requireAuth, async (req, res) => {
   const note = await dbGet('SELECT canvas_states, current_page FROM notes WHERE id = ?', [req.params.id]);
+  const parsed = note?.canvas_states ? JSON.parse(note.canvas_states) : null;
+  // Extract totalPages from meta and remove _meta from response
+  let totalPages = null;
+  if (parsed && parsed._meta) {
+    totalPages = parsed._meta.totalPages;
+    delete parsed._meta;
+  }
   res.json({
-    canvasStates: note?.canvas_states ? JSON.parse(note.canvas_states) : null,
-    currentPage: note?.current_page || 1
+    canvasStates: parsed,
+    currentPage: note?.current_page || 1,
+    totalPages: totalPages
   });
 });
 
