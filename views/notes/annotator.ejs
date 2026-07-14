@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title><%= title %> - Notes</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <% if (mode === 'pdf') { %>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <% } %>
+  <script src="https://cdn.jsdelivr.net/npm/fabric@4.6.0/dist/fabric.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .annotator-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+      background: #f3f4f6;
+    }
+
+    #canvas-viewer {
+      flex: 1;
+      overflow: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #pages-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 16px;
+      min-height: 100%;
+    }
+
+    .page-container {
+      position: relative;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      background: white;
+      transform-origin: top left;
+    }
+
+    .pdf-canvas {
+      display: block;
+      position: relative;
+      z-index: 1;
+    }
+
+    .annotation-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      touch-action: none;
+      z-index: 2;
+    }
+
+    .page-container .canvas-container {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      z-index: 10 !important;
+    }
+
+    .page-container .lower-canvas,
+    .page-container .upper-canvas {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+    }
+
+    .page-container .upper-canvas {
+      cursor: crosshair !important;
+      z-index: 11 !important;
+      touch-action: none !important;
+    }
+
+    /* Pan mode */
+    #canvas-viewer.pan-mode { cursor: grab; }
+    #canvas-viewer.pan-mode:active { cursor: grabbing; }
+    #canvas-viewer.pan-mode .upper-canvas { cursor: grab !important; }
+    #canvas-viewer.pan-mode:active .upper-canvas { cursor: grabbing !important; }
+
+    /* Select mode */
+    #canvas-viewer.select-mode .upper-canvas { cursor: default !important; }
+
+    /* Floating toolbar */
+    .floating-toolbar {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      z-index: 1000;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      padding: 4px 8px;
+      gap: 3px;
+      transition: border-radius 0.2s;
+    }
+
+    .floating-toolbar.collapsed .toolbar-tools { display: none; }
+
+    /* Docked states */
+    .floating-toolbar.docked-left,
+    .floating-toolbar.docked-right {
+      flex-direction: column;
+      padding: 10px 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      max-height: calc(100vh - 120px);
+      overflow: visible;
+    }
+
+    .floating-toolbar.docked-left {
+      left: 0;
+      right: auto;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .floating-toolbar.docked-right {
+      right: 0;
+      left: auto;
+      border-radius: 8px 0 0 8px;
+    }
+
+    .floating-toolbar.docked-left .toolbar-tools,
+    .floating-toolbar.docked-right .toolbar-tools {
+      flex-direction: column;
+      overflow: visible;
+    }
+
+    .floating-toolbar.docked-left .toolbar-divider,
+    .floating-toolbar.docked-right .toolbar-divider {
+      width: 22px;
+      height: 1px;
+      margin: 4px 0;
+    }
+
+    .floating-toolbar.docked-left .toolbar-drag-handle,
+    .floating-toolbar.docked-right .toolbar-drag-handle {
+      margin-right: 0;
+      margin-bottom: 4px;
+    }
+
+    .floating-toolbar.docked-left .toolbar-drag-handle .grip-icon,
+    .floating-toolbar.docked-right .toolbar-drag-handle .grip-icon {
+      transform: rotate(90deg);
+      width: 28px;
+      height: 20px;
+    }
+
+    .floating-toolbar.docked-top,
+    .floating-toolbar.docked-bottom {
+      flex-direction: row !important;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: calc(100vw - 20px);
+    }
+
+    .floating-toolbar.docked-top {
+      top: 0;
+      border-radius: 0 0 8px 8px;
+    }
+
+    .floating-toolbar.docked-bottom {
+      top: auto;
+      bottom: 0;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .toolbar-drag-handle {
+      cursor: grab;
+      padding: 8px 6px;
+      color: #9ca3af;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      margin-right: 4px;
+    }
+
+    .toolbar-drag-handle:hover {
+      color: #6b7280;
+      background: #f3f4f6;
+    }
+
+    .toolbar-drag-handle:active {
+      cursor: grabbing;
+      background: #e5e7eb;
+    }
+
+    .toolbar-drag-handle .grip-icon {
+      width: 20px;
+      height: 28px;
+    }
+
+    .toolbar-tools {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .toolbar-divider {
+      width: 1px;
+      height: 22px;
+      background: #e5e7eb;
+      margin: 0 4px;
+    }
+
+    .tool-wrapper { position: relative; }
+
+    .ftool-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .ftool-btn:hover { background: #f3f4f6; }
+
+    .ftool-btn.active {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    .ftool-btn.active svg { stroke: white; }
+    .ftool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ftool-btn svg { width: 16px; height: 16px; }
+
+    .ftool-btn.has-dropdown::after {
+      content: '';
+      position: absolute;
+      bottom: 3px;
+      right: 3px;
+      width: 0;
+      height: 0;
+      border-left: 3px solid transparent;
+      border-right: 3px solid transparent;
+      border-top: 3px solid #9ca3af;
+    }
+
+    .ftool-btn.active.has-dropdown::after { border-top-color: white; }
+
+    /* Dropdowns */
+    .tool-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-top: 8px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      padding: 10px;
+      display: none;
+      z-index: 1001;
+      min-width: 120px;
+    }
+
+    .tool-dropdown.open { display: block; }
+
+    .tool-dropdown::before {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-bottom: 6px solid white;
+    }
+
+    .dropdown-section { margin-bottom: 10px; }
+    .dropdown-section:last-child { margin-bottom: 0; }
+
+    .dropdown-label {
+      font-size: 10px;
+      color: #6b7280;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .color-picker-wrap {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .color-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: 2px solid transparent;
+      cursor: pointer;
+    }
+
+    .color-swatch:hover { transform: scale(1.1); }
+    .color-swatch.active { border-color: #3b82f6; }
+
+    .width-options {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .width-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #374151;
+    }
+
+    .width-option:hover { background: #f3f4f6; }
+    .width-option.active { background: #dbeafe; color: #1d4ed8; }
+
+    .width-line {
+      background-color: #000000;
+      border-radius: 2px;
+      width: 40px;
+    }
+
+    .option-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+
+    .option-btn {
+      width: 32px;
+      height: 32px;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .option-btn:hover { background: #f3f4f6; }
+    .option-btn.active { background: #dbeafe; border-color: #3b82f6; }
+    .option-btn svg { width: 18px; height: 18px; }
+
+    .eraser-modes {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .eraser-mode {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .eraser-mode:hover { background: #f3f4f6; }
+    .eraser-mode.active { background: #dbeafe; color: #1d4ed8; }
+
+    .zoom-display {
+      font-size: 10px;
+      color: #6b7280;
+      min-width: 32px;
+      text-align: center;
+    }
+
+    /* Save dropdown */
+    .save-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 8px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      padding: 6px;
+      display: none;
+      z-index: 1001;
+      min-width: 160px;
+    }
+
+    .save-dropdown.open { display: block; }
+
+    .save-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      background: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #374151;
+      text-align: left;
+    }
+
+    .save-dropdown-item:hover { background: #f3f4f6; }
+    .save-dropdown-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .ftool-btn.save-btn {
+      background: #22c55e;
+      border-color: #22c55e;
+      color: white;
+    }
+
+    .ftool-btn.save-btn:hover { background: #16a34a; }
+    .ftool-btn.save-btn svg { stroke: white; }
+
+    /* Stylus indicator */
+    .stylus-indicator {
+      display: flex;
+      align-items: center;
+      padding: 4px 8px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      border-radius: 4px;
+      font-size: 11px;
+      gap: 4px;
+    }
+
+    .stylus-indicator svg { width: 14px; height: 14px; }
+    .stylus-indicator.hidden { display: none; }
+
+    /* Loading */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(255,255,255,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Page info */
+    #page-info {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      z-index: 100;
+    }
+
+    /* Bottom docked adjustments */
+    .floating-toolbar.docked-bottom .tool-dropdown {
+      top: auto;
+      bottom: 100%;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    .floating-toolbar.docked-bottom .tool-dropdown::before {
+      top: auto;
+      bottom: -6px;
+      border-top: 6px solid white;
+      border-bottom: none;
+    }
+
+    .floating-toolbar.docked-bottom .save-dropdown {
+      top: auto;
+      bottom: 100%;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    /* Side docked dropdown positioning */
+    .floating-toolbar.docked-left .tool-wrapper,
+    .floating-toolbar.docked-right .tool-wrapper {
+      position: static;
+    }
+
+    .floating-toolbar.docked-left .tool-dropdown,
+    .floating-toolbar.docked-right .tool-dropdown {
+      position: absolute;
+      top: auto;
+      left: auto;
+      right: auto;
+      bottom: auto;
+      transform: none;
+      margin: 0;
+    }
+
+    .floating-toolbar.docked-left .tool-dropdown::before,
+    .floating-toolbar.docked-right .tool-dropdown::before {
+      display: none;
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      .floating-toolbar {
+        left: 50%;
+        right: auto;
+        max-width: calc(100vw - 20px);
+        padding: 4px 6px;
+      }
+
+      .ftool-btn { width: 30px; height: 30px; }
+      .ftool-btn svg { width: 16px; height: 16px; }
+      .toolbar-divider { height: 20px; margin: 0 3px; }
+    }
+
+    /* Audio Panel */
+    .audio-panel {
+      position: fixed;
+      background: white;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+      z-index: 900;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s ease;
+    }
+
+    .audio-panel.hidden {
+      transform: translateX(100%);
+    }
+
+    /* Sidebar mode (iPad and larger) */
+    @media (min-width: 768px) {
+      .audio-panel {
+        top: 0;
+        right: 0;
+        width: 320px;
+        height: 100vh;
+        height: 100dvh;
+      }
+
+      .audio-panel.hidden {
+        transform: translateX(100%);
+      }
+
+      .audio-panel:not(.hidden) {
+        transform: translateX(0);
+      }
+
+      /* Adjust canvas viewer when panel is open */
+      .annotator-container.audio-panel-open #canvas-viewer {
+        margin-right: 320px;
+      }
+    }
+
+    /* Bottom bar mode (mobile) */
+    @media (max-width: 767px) {
+      .audio-panel {
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 50vh;
+        max-height: 400px;
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+      }
+
+      .audio-panel.hidden {
+        transform: translateY(100%);
+      }
+
+      .audio-panel:not(.hidden) {
+        transform: translateY(0);
+      }
+    }
+
+    .audio-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+
+    .audio-panel-header h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #374151;
+      margin: 0;
+    }
+
+    .audio-close-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      color: #6b7280;
+      border-radius: 4px;
+    }
+
+    .audio-close-btn:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .audio-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+
+    .audio-record-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: none;
+      background: #ef4444;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .audio-record-btn:hover {
+      background: #dc2626;
+      transform: scale(1.05);
+    }
+
+    .audio-record-btn.recording {
+      animation: pulse-record 1.5s infinite;
+    }
+
+    @keyframes pulse-record {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      50% { box-shadow: 0 0 0 12px rgba(239,68,68,0); }
+    }
+
+    .audio-status {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #audio-status-text {
+      font-size: 14px;
+      color: #374151;
+    }
+
+    .audio-duration {
+      font-size: 24px;
+      font-weight: 600;
+      color: #ef4444;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .audio-duration.hidden {
+      display: none;
+    }
+
+    .audio-transcript-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .audio-transcript-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+
+    .audio-transcript-header span {
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+    }
+
+    .summarize-btn {
+      font-size: 12px;
+      padding: 4px 12px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .summarize-btn:hover:not(:disabled) {
+      background: #2563eb;
+    }
+
+    .summarize-btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .audio-transcript {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #374151;
+    }
+
+    .transcript-placeholder {
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .audio-summary-container {
+      border-top: 1px solid #e5e7eb;
+      max-height: 200px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .audio-summary-container.hidden {
+      display: none;
+    }
+
+    .audio-summary-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+
+    .audio-summary-header span {
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+    }
+
+    .audio-summary {
+      padding: 16px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #374151;
+      background: #f9fafb;
+    }
+
+    /* Audio button active state */
+    .ftool-btn.audio-active {
+      background: #ef4444;
+      border-color: #ef4444;
+      color: white;
+    }
+
+    .ftool-btn.audio-active:hover {
+      background: #dc2626;
+    }
+
+    .ftool-btn.audio-active svg {
+      stroke: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="annotator-container">
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="loading-spinner"></div>
+    </div>
+
+    <!-- Canvas viewer -->
+    <div id="canvas-viewer">
+      <div id="pages-wrapper"></div>
+    </div>
+
+    <!-- Page info (PDF mode only) -->
+    <% if (mode === 'pdf') { %>
+    <div id="page-info"></div>
+    <% } %>
+  </div>
+
+  <!-- Floating toolbar -->
+  <div id="floating-toolbar" class="floating-toolbar docked-top">
+    <div class="toolbar-drag-handle" id="toolbar-drag-handle" title="Drag to move">
+      <svg class="grip-icon" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="8" cy="6" r="2"/>
+        <circle cx="8" cy="12" r="2"/>
+        <circle cx="8" cy="18" r="2"/>
+        <circle cx="16" cy="6" r="2"/>
+        <circle cx="16" cy="12" r="2"/>
+        <circle cx="16" cy="18" r="2"/>
+      </svg>
+    </div>
+
+    <div class="toolbar-tools">
+      <!-- Pen tool -->
+      <div class="tool-wrapper">
+        <button id="tool-pen" class="ftool-btn has-dropdown active" data-tool="pen" onclick="setTool('pen')" title="Pen">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+          </svg>
+        </button>
+        <div class="tool-dropdown" id="pen-dropdown">
+          <div class="dropdown-section">
+            <span class="dropdown-label">Color</span>
+            <div class="color-picker-wrap">
+              <div class="color-swatch active" style="background:#000000" data-color="#000000" onclick="setPenColor('#000000')"></div>
+              <div class="color-swatch" style="background:#ef4444" data-color="#ef4444" onclick="setPenColor('#ef4444')"></div>
+              <div class="color-swatch" style="background:#3b82f6" data-color="#3b82f6" onclick="setPenColor('#3b82f6')"></div>
+              <div class="color-swatch" style="background:#22c55e" data-color="#22c55e" onclick="setPenColor('#22c55e')"></div>
+              <div class="color-swatch" style="background:#a855f7" data-color="#a855f7" onclick="setPenColor('#a855f7')"></div>
+              <div class="color-swatch" style="background:#f59e0b" data-color="#f59e0b" onclick="setPenColor('#f59e0b')"></div>
+            </div>
+          </div>
+          <div class="dropdown-section">
+            <span class="dropdown-label">Width</span>
+            <div class="width-options">
+              <div class="width-option" data-width="2" onclick="setPenWidth(2)">
+                <div class="width-line" style="height:2px"></div><span>Thin</span>
+              </div>
+              <div class="width-option active" data-width="4" onclick="setPenWidth(4)">
+                <div class="width-line" style="height:4px"></div><span>Medium</span>
+              </div>
+              <div class="width-option" data-width="8" onclick="setPenWidth(8)">
+                <div class="width-line" style="height:8px"></div><span>Wide</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Eraser tool -->
+      <div class="tool-wrapper">
+        <button id="tool-eraser" class="ftool-btn has-dropdown" data-tool="eraser" onclick="setTool('eraser')" title="Eraser">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586M20 19H4M14.5 5.5L18 9l-8.5 8.5H6v-3.5l8.5-8.5z"/>
+          </svg>
+        </button>
+        <div class="tool-dropdown" id="eraser-dropdown">
+          <div class="dropdown-section">
+            <span class="dropdown-label">Mode</span>
+            <div class="eraser-modes">
+              <div class="eraser-mode active" data-mode="eraser" onclick="setEraserMode('eraser')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6"/>
+                </svg>
+                <span>Stroke (tap to remove)</span>
+              </div>
+              <div class="eraser-mode" data-mode="eraser-precision" onclick="setEraserMode('eraser-precision')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.5 5.5L18 9l-8.5 8.5H6v-3.5l8.5-8.5z"/>
+                </svg>
+                <span>Precision (draw to erase)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Highlighter tool -->
+      <div class="tool-wrapper">
+        <button id="tool-highlighter" class="ftool-btn has-dropdown" data-tool="highlighter" onclick="setTool('highlighter')" title="Highlighter">
+          <svg fill="currentColor" viewBox="0 0 24 24">
+            <path d="M15.54 3.5L20.5 8.47l-3.18 3.18L12.8 7.12l2.73-3.62zM3 21.5v-3l8.53-8.52 4.52 4.52L7.5 21.5H3z"/>
+          </svg>
+        </button>
+        <div class="tool-dropdown" id="highlighter-dropdown">
+          <div class="dropdown-section">
+            <span class="dropdown-label">Color</span>
+            <div class="color-picker-wrap">
+              <div class="color-swatch active" style="background:rgba(255,255,0,0.5)" data-color="rgba(255,255,0,0.4)" onclick="setHighlighterColor('rgba(255,255,0,0.4)')"></div>
+              <div class="color-swatch" style="background:rgba(0,255,0,0.5)" data-color="rgba(0,255,0,0.4)" onclick="setHighlighterColor('rgba(0,255,0,0.4)')"></div>
+              <div class="color-swatch" style="background:rgba(255,105,180,0.5)" data-color="rgba(255,105,180,0.4)" onclick="setHighlighterColor('rgba(255,105,180,0.4)')"></div>
+              <div class="color-swatch" style="background:rgba(0,191,255,0.5)" data-color="rgba(0,191,255,0.4)" onclick="setHighlighterColor('rgba(0,191,255,0.4)')"></div>
+              <div class="color-swatch" style="background:rgba(255,165,0,0.5)" data-color="rgba(255,165,0,0.4)" onclick="setHighlighterColor('rgba(255,165,0,0.4)')"></div>
+            </div>
+          </div>
+          <div class="dropdown-section">
+            <span class="dropdown-label">Width</span>
+            <div class="width-options">
+              <div class="width-option" data-width="8" onclick="setHighlighterWidth(8)">
+                <div class="width-line" style="height:4px;background:rgba(255,255,0,0.6)"></div><span>Thin</span>
+              </div>
+              <div class="width-option active" data-width="20" onclick="setHighlighterWidth(20)">
+                <div class="width-line" style="height:10px;background:rgba(255,255,0,0.6)"></div><span>Medium</span>
+              </div>
+              <div class="width-option" data-width="32" onclick="setHighlighterWidth(32)">
+                <div class="width-line" style="height:16px;background:rgba(255,255,0,0.6)"></div><span>Wide</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pan tool -->
+      <button id="tool-pan" class="ftool-btn" data-tool="pan" onclick="setTool('pan')" title="Pan/Grab">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"/>
+        </svg>
+      </button>
+
+      <div class="toolbar-divider"></div>
+
+      <!-- Shape tool -->
+      <div class="tool-wrapper">
+        <button id="tool-shape" class="ftool-btn has-dropdown" data-tool="shape" onclick="setTool('shape')" title="Shapes">
+          <svg id="shape-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <line x1="5" y1="19" x2="19" y2="5" stroke-width="2"/>
+          </svg>
+        </button>
+        <div class="tool-dropdown" id="shape-dropdown">
+          <div class="dropdown-section">
+            <span class="dropdown-label">Shape</span>
+            <div class="option-grid">
+              <button class="option-btn active" data-shape="line" onclick="setShape('line')" title="Line">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="5" y1="19" x2="19" y2="5" stroke-width="2"/></svg>
+              </button>
+              <button class="option-btn" data-shape="dashed" onclick="setShape('dashed')" title="Dashed">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="5" y1="19" x2="19" y2="5" stroke-width="2" stroke-dasharray="4,3"/></svg>
+              </button>
+              <button class="option-btn" data-shape="rect" onclick="setShape('rect')" title="Rectangle">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" stroke-width="2"/></svg>
+              </button>
+              <button class="option-btn" data-shape="circle" onclick="setShape('circle')" title="Circle">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke-width="2"/></svg>
+              </button>
+              <button class="option-btn" data-shape="triangle" onclick="setShape('triangle')" title="Triangle">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12,4 4,20 20,20" stroke-width="2"/></svg>
+              </button>
+              <button class="option-btn" data-shape="star" onclick="setShape('star')" title="Star">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9" stroke-width="1.5"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="dropdown-section">
+            <span class="dropdown-label">Color</span>
+            <div class="color-picker-wrap">
+              <div class="color-swatch active" style="background:#000000" data-color="#000000" onclick="setShapeColor('#000000')"></div>
+              <div class="color-swatch" style="background:#ef4444" data-color="#ef4444" onclick="setShapeColor('#ef4444')"></div>
+              <div class="color-swatch" style="background:#3b82f6" data-color="#3b82f6" onclick="setShapeColor('#3b82f6')"></div>
+              <div class="color-swatch" style="background:#22c55e" data-color="#22c55e" onclick="setShapeColor('#22c55e')"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Text tool -->
+      <button id="tool-text" class="ftool-btn" data-tool="text" onclick="setTool('text')" title="Text">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <text x="6" y="18" font-size="18" font-weight="bold" font-family="Arial">T</text>
+        </svg>
+      </button>
+
+      <!-- Select tool -->
+      <button id="tool-select" class="ftool-btn" data-tool="select" onclick="setTool('select')" title="Select">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
+        </svg>
+      </button>
+
+      <div class="toolbar-divider"></div>
+
+      <!-- Undo/Redo -->
+      <button id="undo-btn" onclick="undo()" class="ftool-btn" title="Undo (Ctrl+Z)">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+        </svg>
+      </button>
+      <button id="redo-btn" onclick="redo()" class="ftool-btn" title="Redo (Ctrl+Shift+Z)">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"/>
+        </svg>
+      </button>
+
+      <div class="toolbar-divider"></div>
+
+      <!-- Zoom -->
+      <button onclick="zoomOut()" class="ftool-btn" title="Zoom out">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"/>
+        </svg>
+      </button>
+      <span id="zoom-display" class="zoom-display">100%</span>
+      <button onclick="zoomIn()" class="ftool-btn" title="Zoom in">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/>
+        </svg>
+      </button>
+
+      <div class="toolbar-divider"></div>
+
+      <!-- Audio recording -->
+      <button id="tool-audio" onclick="toggleAudioPanel()" class="ftool-btn" title="Record Audio">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+        </svg>
+      </button>
+
+      <div class="toolbar-divider"></div>
+
+      <!-- Save dropdown -->
+      <div class="tool-wrapper">
+        <button id="save-btn" onclick="toggleSaveDropdown(event)" class="ftool-btn save-btn has-dropdown" title="Save">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+          </svg>
+        </button>
+        <div id="save-dropdown" class="save-dropdown">
+          <button class="save-dropdown-item" onclick="saveAndContinue()">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+            </svg>
+            <span>Save</span>
+          </button>
+          <button class="save-dropdown-item" onclick="saveAndExit()">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            <span>Save and Exit</span>
+          </button>
+          <button class="save-dropdown-item" onclick="exitWithoutSaving()">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            <span>Exit without saving</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Stylus indicator -->
+      <span id="stylus-indicator" class="stylus-indicator hidden" title="Stylus active">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+        </svg>
+      </span>
+    </div>
+  </div>
+
+  <!-- Audio Panel (sidebar on iPad, bottom bar on mobile) -->
+  <div id="audio-panel" class="audio-panel hidden">
+    <div class="audio-panel-header">
+      <h3>Audio Recording</h3>
+      <button onclick="toggleAudioPanel()" class="audio-close-btn">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="audio-controls">
+      <button id="audio-record-btn" onclick="toggleRecording()" class="audio-record-btn">
+        <svg id="audio-record-icon" fill="currentColor" viewBox="0 0 24 24" width="32" height="32">
+          <circle cx="12" cy="12" r="10"/>
+        </svg>
+      </button>
+      <div class="audio-status">
+        <span id="audio-status-text">Tap to record</span>
+        <span id="audio-duration" class="audio-duration hidden">00:00</span>
+      </div>
+    </div>
+
+    <div class="audio-transcript-container">
+      <div class="audio-transcript-header">
+        <span>Transcript</span>
+        <button id="summarize-btn" onclick="summarizeTranscript()" class="summarize-btn" disabled>
+          Summarize
+        </button>
+      </div>
+      <div id="audio-transcript" class="audio-transcript" contenteditable="false">
+        <p class="transcript-placeholder">Recording transcript will appear here...</p>
+      </div>
+    </div>
+
+    <div id="audio-summary-container" class="audio-summary-container hidden">
+      <div class="audio-summary-header">
+        <span>Summary</span>
+      </div>
+      <div id="audio-summary" class="audio-summary"></div>
+    </div>
+  </div>
+
+  <script>
+    var NOTE_ID = <%= note.id %>;
+    var ANNOTATOR_MODE = '<%= mode %>';
+    var OPENAI_CONFIGURED = <%= openaiConfigured %>;
+    <% if (mode === 'pdf' && note.pdf_filename) { %>
+    var PDF_FILE_URL = '/uploads/<%= note.pdf_filename %>';
+    <% } else { %>
+    var PDF_FILE_URL = null;
+    <% } %>
+  </script>
+  <script src="/js/annotator.js"></script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+/**
+ * OpenAI Integration
+ * - Whisper API for audio transcription
+ * - GPT-4o-mini for summarisation
+ */
+
+const OpenAI = require('openai');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+let openai = null;
+
+function isConfigured() {
+  return !!process.env.OPENAI_API_KEY;
+}
+
+function getClient() {
+  if (!openai && isConfigured()) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+  }
+  return openai;
+}
+
+/**
+ * Transcribe audio using Whisper API
+ * @param {Buffer} audioBuffer - Audio data (webm, mp3, wav, etc.)
+ * @param {string} mimeType - MIME type of the audio
+ * @returns {Promise<{text: string, segments?: Array, duration?: number}>}
+ */
+async function transcribeAudio(audioBuffer, mimeType = 'audio/webm') {
+  const client = getClient();
+  if (!client) {
+    throw new Error('OpenAI not configured');
+  }
+
+  // Determine file extension from mime type (strip codec info like ;codecs=opus)
+  const baseMime = mimeType.split(';')[0].trim().toLowerCase();
+  let ext = 'webm';
+  if (baseMime.includes('mp4') || baseMime.includes('m4a')) {
+    ext = 'mp4';
+  } else if (baseMime.includes('mp3') || baseMime.includes('mpeg')) {
+    ext = 'mp3';
+  } else if (baseMime.includes('wav')) {
+    ext = 'wav';
+  } else if (baseMime.includes('ogg') || baseMime.includes('oga')) {
+    ext = 'ogg';
+  } else if (baseMime.includes('webm')) {
+    ext = 'webm';
+  }
+
+  console.log('Transcribing audio:', { mimeType, baseMime, ext, bufferSize: audioBuffer.length });
+
+  const tempPath = path.join(os.tmpdir(), `whisper-${Date.now()}.${ext}`);
+
+  // Common Whisper hallucinations to filter out
+  const HALLUCINATION_PATTERNS = [
+    /^thanks?\.?$/i,
+    /^thank you\.?$/i,
+    /^thanks for watching\.?$/i,
+    /^have a good one\.?$/i,
+    /^bye\.?$/i,
+    /^goodbye\.?$/i,
+    /^see you\.?$/i,
+    /^take care\.?$/i,
+    /^subscribe.*$/i,
+    /transcribed? by/i,
+    /^\s*$/
+  ];
+
+  function isHallucination(text) {
+    const trimmed = text.trim();
+    return HALLUCINATION_PATTERNS.some(pattern => pattern.test(trimmed));
+  }
+
+  try {
+    fs.writeFileSync(tempPath, audioBuffer);
+
+    const transcription = await client.audio.transcriptions.create({
+      file: fs.createReadStream(tempPath),
+      model: 'whisper-1',
+      language: 'en',
+      response_format: 'verbose_json',
+      timestamp_granularities: ['segment']
+    });
+
+    // Filter out hallucinated text
+    let text = transcription.text || '';
+    if (isHallucination(text)) {
+      console.log('Filtered hallucination:', text);
+      text = '';
+    }
+
+    return {
+      text: text,
+      segments: transcription.segments || [],
+      duration: transcription.duration
+    };
+  } finally {
+    // Clean up temp file
+    try {
+      fs.unlinkSync(tempPath);
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+  }
+}
+
+/**
+ * Summarise transcript using GPT-4o-mini
+ * @param {string} transcript - Full transcript text
+ * @param {string} title - Optional note title for context
+ * @returns {Promise<string>} Summary text
+ */
+async function summariseTranscript(transcript, title = '') {
+  const client = getClient();
+  if (!client) {
+    throw new Error('OpenAI not configured');
+  }
+
+  const systemPrompt = `You are a helpful assistant that summarises audio transcripts into clear, concise notes.
+
+RULES:
+- Use bullet points for clarity
+- Keep each bullet to ONE short sentence
+- Extract key points, decisions, and action items
+- Be brief - less is more
+- Use simple, clear language`;
+
+  const userPrompt = `${title ? `Title: ${title}\n\n` : ''}Transcript:\n${transcript}\n\nCreate a brief summary with bullet points.`;
+
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.3,
+    max_tokens: 1000
+  });
+
+  return response.choices[0]?.message?.content || '';
+}
+
+module.exports = {
+  isConfigured,
+  transcribeAudio,
+  summariseTranscript
+};

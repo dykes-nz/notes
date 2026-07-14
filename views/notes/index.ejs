@@ -1,0 +1,256 @@
+<%- include('../layouts/main', { body: `
+<!-- Decorative quill and book icon -->
+<svg id="decorative-quill" class="fixed bottom-8 left-8 w-32 h-32 pointer-events-none decorative-icon" style="opacity: 0.2;" viewBox="0 0 92.69 75.53" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5">
+  <path d="M48.99,65.62c-7.6-14.01-17.33-18.52-28.96-22.13l14.96-24.21c5.03.08,7.28,1.21,10.19,4.91"/>
+  <path d="M37.17,57.88c-8.12-6.51-18.33-9.59-29.11-10.37l20.07-27.78"/>
+  <path d="M41.55,64c-12.49-4.65-23.16-7.25-34.69-6.78l2.26-3.85"/>
+  <path d="M43.81,68.52c-12.76-3.19-23.63-3.22-35.75-3.59l1.2-3.19"/>
+  <path d="M51.26,31.47c-.76,1.56-.48,2.25.38,3.43,2.77-1.49,7.04-5.42,11.36-9.44"/>
+  <path d="M46.28,44.53c2.89-1.9,4.8-3.35,7.3-6.16,2.44,1.38,4.74.49,7.69-.45"/>
+  <path d="M61.7,33.63c1.54,1.03,3.41.76,5.06.25,2.95-1.65,5.19-2.89,7.26-5.38-1.79-.36-3.35-.95-4.51-1.97"/>
+  <path d="M52.72,27.86c.94-3.24,1.33-4.9,4.34-6.8"/>
+  <path d="M60.66,21.36c.89-2.93,2.83-5.01,5.37-6.5"/>
+  <path d="M69.63,16.35c.12-5.47,11.61-5.95,18.01-5.85-7.24,5.56-8.25,12.18-11.64,14.86"/>
+</svg>
+
+<div class="mx-auto" style="max-width: calc(100% - 400px); margin: 200px 200px 0 200px;">
+  <!-- Notes Grid -->
+  <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    ${notes.length === 0 ? `
+    <div class="col-span-full text-center py-16">
+      <svg class="w-20 h-20 mx-auto text-white/60 mb-4" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+      </svg>
+      <p class="text-white/80 text-lg" style="text-shadow: 0 1px 3px rgba(0,0,0,0.5);">No notes yet</p>
+      <p class="text-white/60 text-sm mt-2" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">Use the menu to create a new note</p>
+    </div>
+    ` : notes.map((note, index) => `
+    <div class="note-card bg-white/40 backdrop-blur-sm rounded-xl border border-gray-200 p-4 hover:shadow-lg hover:bg-white/70 transition relative group" draggable="true" data-note-id="${note.id}" data-index="${index}">
+      <div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="9" cy="6" r="2"/>
+          <circle cx="9" cy="12" r="2"/>
+          <circle cx="9" cy="18" r="2"/>
+          <circle cx="15" cy="6" r="2"/>
+          <circle cx="15" cy="12" r="2"/>
+          <circle cx="15" cy="18" r="2"/>
+        </svg>
+      </div>
+      <a href="/note/${note.id}" class="block pl-6">
+        <h3 class="font-semibold text-gray-800 mb-2 truncate pr-8" style="font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem;">${note.title || 'Untitled'}</h3>
+        ${note.folder_name ? `<span class="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded mb-2">${note.folder_name}</span>` : ''}
+        <p class="text-sm text-gray-500">Updated ${new Date(note.updated_at).toLocaleDateString()}</p>
+      </a>
+      <button onclick="confirmDeleteNote(${note.id}, '${(note.title || 'Untitled').replace(/'/g, "\\'")}')"
+              class="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Delete note">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      </button>
+    </div>
+    `).join('')}
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="delete-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+  <div class="bg-white rounded-xl p-6 w-full max-w-sm mx-4">
+    <h3 class="text-lg font-semibold text-gray-800 mb-3">Delete Note</h3>
+    <p class="text-gray-600 mb-4">Are you sure you want to delete "<span id="delete-note-title" class="font-medium"></span>"? This will permanently remove the note and all its contents.</p>
+    <div class="flex justify-end gap-3">
+      <button onclick="hideDeleteModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+      <button onclick="executeDeleteNote()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import PDF Modal -->
+<div id="import-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+  <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">Import PDF</h3>
+      <button onclick="hideImportModal()" class="text-gray-400 hover:text-gray-600">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div id="dropzone" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-500 hover:bg-blue-50 transition cursor-pointer"
+         onclick="document.getElementById('pdf-input').click()">
+      <svg class="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+      </svg>
+      <p class="text-gray-600 mb-2">Drop PDF here or click to browse</p>
+      <p class="text-sm text-gray-400">PDF files only</p>
+    </div>
+    <input type="file" id="pdf-input" accept="application/pdf" class="hidden" onchange="handlePdfSelect(this.files[0])">
+    <div id="upload-progress" class="hidden mt-4">
+      <div class="flex items-center">
+        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
+        <span class="text-gray-600">Uploading...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var currentFolderId = '${typeof currentFolder !== 'undefined' && currentFolder ? currentFolder.id : ''}';
+  var noteToDelete = null;
+
+  function confirmDeleteNote(noteId, noteTitle) {
+    noteToDelete = noteId;
+    document.getElementById('delete-note-title').textContent = noteTitle;
+    document.getElementById('delete-modal').classList.remove('hidden');
+  }
+
+  function hideDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+    noteToDelete = null;
+  }
+
+  function executeDeleteNote() {
+    if (!noteToDelete) return;
+
+    fetch('/note/' + noteToDelete, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    }).then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (result.success) {
+          window.location.reload();
+        } else {
+          alert('Failed to delete note: ' + (result.error || 'Unknown error'));
+        }
+      }).catch(function(err) {
+        alert('Failed to delete note: ' + err.message);
+      }).finally(function() {
+        hideDeleteModal();
+      });
+  }
+
+  function hideImportModal() {
+    document.getElementById('import-modal').classList.add('hidden');
+    document.getElementById('upload-progress').classList.add('hidden');
+  }
+
+  function handlePdfSelect(file) {
+    if (!file || file.type !== 'application/pdf') {
+      alert('Please select a PDF file');
+      return;
+    }
+
+    document.getElementById('upload-progress').classList.remove('hidden');
+
+    // Create note with PDF directly
+    var formData = new FormData();
+    formData.append('pdf', file);
+    if (currentFolderId) {
+      formData.append('folder_id', currentFolderId);
+    }
+
+    fetch('/note/pdf', {
+      method: 'POST',
+      body: formData
+    }).then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (result.noteId) {
+          window.location.href = '/note/' + result.noteId;
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+      }).catch(function(err) {
+        alert('Upload failed: ' + err.message);
+        document.getElementById('upload-progress').classList.add('hidden');
+      });
+  }
+
+  // Drag and drop support
+  var dropzone = document.getElementById('dropzone');
+  if (dropzone) {
+    dropzone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      dropzone.classList.add('border-blue-500', 'bg-blue-50');
+    });
+    dropzone.addEventListener('dragleave', function() {
+      dropzone.classList.remove('border-blue-500', 'bg-blue-50');
+    });
+    dropzone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dropzone.classList.remove('border-blue-500', 'bg-blue-50');
+      if (e.dataTransfer.files.length) {
+        handlePdfSelect(e.dataTransfer.files[0]);
+      }
+    });
+  }
+
+  // Auto-open import modal if redirected with ?import=1
+  if (window.location.search.includes('import=1')) {
+    showImportModal();
+    history.replaceState({}, '', '/');
+  }
+
+  // Drag and drop for note reordering
+  var draggedCard = null;
+  var dragPlaceholder = null;
+
+  document.querySelectorAll('.note-card').forEach(function(card) {
+    card.addEventListener('dragstart', function(e) {
+      draggedCard = card;
+      card.style.opacity = '0.5';
+      e.dataTransfer.effectAllowed = 'move';
+
+      // Create placeholder
+      dragPlaceholder = document.createElement('div');
+      dragPlaceholder.className = 'note-placeholder bg-blue-100/50 border-2 border-dashed border-blue-300 rounded-xl';
+      dragPlaceholder.style.height = card.offsetHeight + 'px';
+    });
+
+    card.addEventListener('dragend', function(e) {
+      card.style.opacity = '1';
+      if (dragPlaceholder && dragPlaceholder.parentNode) {
+        dragPlaceholder.parentNode.removeChild(dragPlaceholder);
+      }
+      draggedCard = null;
+      dragPlaceholder = null;
+      saveNoteOrder();
+    });
+
+    card.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      if (draggedCard && draggedCard !== card) {
+        var grid = document.getElementById('notes-grid');
+        var cards = Array.from(grid.querySelectorAll('.note-card'));
+        var draggedIndex = cards.indexOf(draggedCard);
+        var targetIndex = cards.indexOf(card);
+
+        if (draggedIndex < targetIndex) {
+          card.parentNode.insertBefore(dragPlaceholder, card.nextSibling);
+          card.parentNode.insertBefore(draggedCard, card.nextSibling);
+        } else {
+          card.parentNode.insertBefore(dragPlaceholder, card);
+          card.parentNode.insertBefore(draggedCard, card);
+        }
+      }
+    });
+  });
+
+  function saveNoteOrder() {
+    var grid = document.getElementById('notes-grid');
+    var cards = Array.from(grid.querySelectorAll('.note-card'));
+    var order = cards.map(function(card) {
+      return parseInt(card.dataset.noteId);
+    });
+
+    fetch('/notes/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: order })
+    }).catch(function(err) {
+      console.error('Failed to save order:', err);
+    });
+  }
+</script>
+` }) %>

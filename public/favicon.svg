@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 5 55 50">
+  <style>
+    .st0 {
+      fill: none;
+      stroke: #004a99;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 3px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .st0 { stroke: #FFFFFF; }
+    }
+  </style>
+  <!-- Quill/feather only -->
+  <path class="st0" d="M51.26,31.47c-.76,1.56-.48,2.25.38,3.43,2.77-1.49,7.04-5.42,11.36-9.44"/>
+  <path class="st0" d="M46.28,44.53c2.89-1.9,4.8-3.35,7.3-6.16,2.44,1.38,4.74.49,7.69-.45"/>
+  <path class="st0" d="M61.7,33.63c1.54,1.03,3.41.76,5.06.25,2.95-1.65,5.19-2.89,7.26-5.38-1.79-.36-3.35-.95-4.51-1.97"/>
+  <path class="st0" d="M52.72,27.86c.94-3.24,1.33-4.9,4.34-6.8"/>
+  <path class="st0" d="M60.66,21.36c.89-2.93,2.83-5.01,5.37-6.5"/>
+  <path class="st0" d="M69.63,16.35c.12-5.47,11.61-5.95,18.01-5.85-7.24,5.56-8.25,12.18-11.64,14.86"/>
+</svg>
