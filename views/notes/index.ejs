@@ -728,23 +728,37 @@
       var d = cardDrag;
       cardDrag = null;
       cancelPendingReorder();
-      d.ghost.remove();
-      d.card.style.opacity = '1';
-
-      var target = combineTarget;
-      clearCombineTarget();
 
       // Dragged out of the expanded folder: released past the panel edge
-      // removes the note from the folder
+      // removes the note from the folder. Optimistic UI - the card leaves
+      // the panel immediately and the ghost stays where it was dropped
+      // until the refreshed page takes over (restoring it first read as
+      // a failed drag).
       if (d.fromOverlay) {
         var panel = document.getElementById('folder-overlay-panel').getBoundingClientRect();
         var outside = d.lastX < panel.left || d.lastX > panel.right ||
                       d.lastY < panel.top || d.lastY > panel.bottom;
         if (d.moved && outside && d.card.dataset.noteId) {
-          moveNoteToFolder(d.card.dataset.noteId, null);
+          var noteId = parseInt(d.card.dataset.noteId);
+          d.card.remove();
+          d.ghost.style.opacity = '1';
+          FOLDERS_DATA.forEach(function(f) {
+            f.notes = f.notes.filter(function(n) { return n.id !== noteId; });
+          });
+          moveNoteToFolder(noteId, null); // reloads when the server confirms
+          return;
         }
+        d.ghost.remove();
+        d.card.style.opacity = '1';
+        clearCombineTarget();
         return;
       }
+
+      d.ghost.remove();
+      d.card.style.opacity = '1';
+
+      var target = combineTarget;
+      clearCombineTarget();
 
       // Dropped centred on another card: combine (iOS folder behaviour)
       if (target && d.card.dataset.noteId) {
