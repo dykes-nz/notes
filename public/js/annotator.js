@@ -1900,10 +1900,9 @@
   // ============= AUDIO RECORDING =============
 
   let mediaRecorder = null;
+  let audioStream = null;
   let currentMimeType = 'audio/webm';
   let audioChunks = [];
-  let audioInitChunk = null; // For Safari fMP4: stores the init segment with headers
-  let isSafariRecording = false;
   let recordingStartTime = null;
   let recordingInterval = null;
   let transcriptionInterval = null;
@@ -2027,23 +2026,9 @@
 
       console.log('Recording with mimeType:', mimeType);
       currentMimeType = mimeType;
-      isSafariRecording = mimeType.includes('mp4') || mimeType.includes('m4a') || mimeType.includes('aac');
-      mediaRecorder = new MediaRecorder(stream, { mimeType });
-      audioChunks = [];
-      audioInitChunk = null;
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          // For Safari fMP4, keep the first chunk as init segment (has headers)
-          if (isSafariRecording && audioInitChunk === null) {
-            audioInitChunk = e.data;
-          }
-          audioChunks.push(e.data);
-        }
-      };
-
-      mediaRecorder.start(1000); // Collect data every second
+      audioStream = stream;
       isRecording = true;
+      startRecorderSegment();
       recordingStartTime = Date.now();
 
       // Update UI
@@ -2070,8 +2055,14 @@
       // Update duration display
       recordingInterval = setInterval(updateDuration, 1000);
 
-      // Send chunks for transcription every 15 seconds
-      transcriptionInterval = setInterval(sendForTranscription, 15000);
+      // Every 15 seconds, rotate the recorder so each segment is a complete
+      // standalone file (chunks sliced from one continuous recording lack
+      // container headers after the first, and ffmpeg rejects them)
+      transcriptionInterval = setInterval(() => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          mediaRecorder.stop(); // onstop sends the segment and starts a new one
+        }
+      }, 15000);
 
     } catch (err) {
       console.error('Failed to start recording:', err);
@@ -2085,20 +2076,47 @@
     }
   }
 
-  function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-      mediaRecorder.stream.getTracks().forEach(track => track.stop());
-    }
+  // Start a fresh MediaRecorder segment on the live stream. Each segment
+  // produces a complete file with headers, sent for transcription on stop.
+  function startRecorderSegment() {
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(audioStream, { mimeType: currentMimeType });
 
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        audioChunks.push(e.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      const sendPromise = audioChunks.length > 0 ? sendForTranscription() : Promise.resolve();
+
+      if (isRecording) {
+        // Segment rotation - keep recording on the same stream
+        startRecorderSegment();
+      } else {
+        // Final segment - release the microphone
+        audioStream?.getTracks().forEach(track => track.stop());
+        audioStream = null;
+        const statusText = document.getElementById('audio-status-text');
+        if (statusText) statusText.textContent = 'Transcribing...';
+        sendPromise.then(() => {
+          const el = document.getElementById('audio-status-text');
+          if (el) el.textContent = 'Tap to record';
+        });
+      }
+    };
+
+    mediaRecorder.start();
+  }
+
+  function stopRecording() {
     clearInterval(recordingInterval);
     clearInterval(transcriptionInterval);
-
     isRecording = false;
 
-    // Send final chunk for transcription
-    if (audioChunks.length > 0) {
-      sendForTranscription();
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop(); // onstop sends the final segment and releases the mic
     }
 
     // Update UI
