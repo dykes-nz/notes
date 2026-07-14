@@ -72,6 +72,10 @@
   const canvasStates = {};
   const undoStacks = {};
   const redoStacks = {};
+  // Suppresses undo tracking while a state is being restored (undo/redo)
+  // or bulk-modified programmatically - object events fired during
+  // loadFromJSON would otherwise re-serialise the canvas per object
+  let isRestoringState = false;
 
   // Palm rejection state
   let stylusActive = false;
@@ -349,6 +353,13 @@
 
     setupCanvasHandlers(fabricCanvas, pageNum, pageContainer);
     fabricCanvases[pageNum] = fabricCanvas;
+
+    // Seed the baseline state so the first undo returns here instead of
+    // clearing the page
+    if (undoStacks[pageNum].length === 0) {
+      saveToUndoStack(pageNum);
+    }
+
     applyToolSettings(fabricCanvas);
   }
 
@@ -443,6 +454,13 @@
 
         setupCanvasHandlers(fabricCanvas, pageNum, pageContainer);
         fabricCanvases[pageNum] = fabricCanvas;
+
+        // Seed the baseline state so the first undo returns here instead
+        // of clearing the page
+        if (undoStacks[pageNum].length === 0) {
+          saveToUndoStack(pageNum);
+        }
+
         applyToolSettings(fabricCanvas);
       } catch (pageError) {
         console.error('Error rendering page ' + pageNum + ':', pageError);
@@ -485,19 +503,22 @@
     fabricCanvas.freeDrawingBrush.color = strokeColor;
     fabricCanvas.freeDrawingBrush.width = strokeWidth;
 
-    // Track changes for undo
+    // Track changes for undo (skipped during undo/redo restores)
     fabricCanvas.on('object:added', function() {
+      if (isRestoringState) return;
       saveToUndoStack(pageNum);
       redoStacks[pageNum] = [];
       updateUndoRedoButtons();
     });
 
     fabricCanvas.on('object:removed', function() {
+      if (isRestoringState) return;
       saveToUndoStack(pageNum);
       updateUndoRedoButtons();
     });
 
     fabricCanvas.on('object:modified', function() {
+      if (isRestoringState) return;
       saveToUndoStack(pageNum);
       redoStacks[pageNum] = [];
       updateUndoRedoButtons();
@@ -1095,13 +1116,15 @@
 
     let carry = []; // { obj, offset } group moving to the next page
 
+    // Suppress per-object undo tracking; one snapshot per page at the end
+    isRestoringState = true;
+
     for (let pageNum = startPage; pageNum <= totalPages; pageNum++) {
       const canvas = fabricCanvases[pageNum];
       if (!canvas) break;
       if (pageNum > startPage && carry.length === 0) break; // cascade finished
 
       if (!undoStacks[pageNum]) undoStacks[pageNum] = [];
-      saveToUndoStack(pageNum);
 
       const limit = canvas.height - BOTTOM_MARGIN;
       const existing = canvas.getObjects().filter(o => !o.excludeFromExport);
@@ -1163,7 +1186,12 @@
 
       canvas.getObjects().forEach(o => o.setCoords());
       canvas.renderAll();
+
+      // One undo entry for this page's reflow
+      saveToUndoStack(pageNum);
     }
+
+    isRestoringState = false;
 
     // Save state
     saveState();
@@ -2028,20 +2056,20 @@
     const stack = undoStacks[currentPage];
     const canvas = fabricCanvases[currentPage];
 
+    // The bottom entry is the baseline (state when the note was opened
+    // or the page created) - it is never popped
     if (stack && stack.length > 1 && canvas) {
       const currentState = stack.pop();
       redoStacks[currentPage].push(currentState);
 
       const prevState = stack[stack.length - 1];
+      isRestoringState = true;
       canvas.loadFromJSON(prevState, () => {
+        isRestoringState = false;
         markEraserPaths(canvas);
+        canvas.requestRenderAll();
         updateUndoRedoButtons();
       });
-    } else if (stack && stack.length === 1 && canvas) {
-      const currentState = stack.pop();
-      redoStacks[currentPage].push(currentState);
-      canvas.clear();
-      updateUndoRedoButtons();
     }
   };
 
@@ -2053,8 +2081,11 @@
       const nextState = stack.pop();
       undoStacks[currentPage].push(nextState);
 
+      isRestoringState = true;
       canvas.loadFromJSON(nextState, () => {
+        isRestoringState = false;
         markEraserPaths(canvas);
+        canvas.requestRenderAll();
         updateUndoRedoButtons();
       });
     }
@@ -2065,7 +2096,8 @@
     const redoBtn = document.getElementById('redo-btn');
 
     if (undoBtn) {
-      undoBtn.disabled = !undoStacks[currentPage] || undoStacks[currentPage].length === 0;
+      // Bottom entry is the baseline - undo is possible above it only
+      undoBtn.disabled = !undoStacks[currentPage] || undoStacks[currentPage].length <= 1;
     }
     if (redoBtn) {
       redoBtn.disabled = !redoStacks[currentPage] || redoStacks[currentPage].length === 0;
