@@ -1076,7 +1076,18 @@
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const isOpen = dropdown.classList.contains('open');
+          const tool = btn.dataset.tool;
+          const wasActive = btn.classList.contains('active');
           closeAllDropdowns();
+
+          // Tool buttons (pen/eraser/highlighter): first click just
+          // activates the tool; the dropdown only opens when the tool
+          // is already active
+          if (tool && !wasActive) {
+            setTool(tool);
+            return;
+          }
+
           if (!isOpen) {
             dropdown.classList.add('open');
             positionDropdown(btn, dropdown);
