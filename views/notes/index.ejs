@@ -32,43 +32,44 @@
     padding: 2px 8px;
     outline: none;
   }
-  .folder-chip {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 9999px;
-    background: rgba(255,255,255,0.3);
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(229,231,235,0.8);
-    color: #1f2937;
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 0.875rem;
+  /* iOS-style folder tiles */
+  .folder-tile {
+    border-width: 2px;
+    border-color: rgba(255,255,255,0.7);
+  }
+  .mini-note {
+    background: rgba(255,255,255,0.85);
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 4px 6px;
+    font-size: 10px;
     font-weight: 600;
-    text-decoration: none;
-    transition: background 0.15s;
+    color: #4b5563;
+    height: 30px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    line-height: 22px;
   }
-  .folder-chip:hover { background: rgba(255,255,255,0.6); }
-  .folder-chip-active {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: white;
+  .mini-note.mini-empty {
+    background: rgba(255,255,255,0.3);
+    border-style: dashed;
   }
-  .folder-chip-active:hover { background: #2563eb; }
+  /* Drop-to-combine highlight (iOS folder-creation hover) */
+  .combine-target {
+    outline: 3px solid #3b82f6;
+    outline-offset: 3px;
+    transform: scale(1.03);
+    transition: transform 0.1s;
+  }
+  .overlay-note { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 </style>
 
 <div class="mx-auto" style="max-width: calc(100% - 400px); margin: 200px 200px 0 200px;">
-  <!-- Folder navigation -->
-  ${folders.length === 0 ? `` : `
-  <div class="flex flex-wrap items-center gap-2 mb-6">
-    <a href="/" class="folder-chip ${!currentFolder ? 'folder-chip-active' : ''}">All</a>
-    ${folders.map(f => `
-    <a href="/folder/${f.id}" class="folder-chip ${currentFolder && currentFolder.id === f.id ? 'folder-chip-active' : ''}">${f.name}</a>
-    `).join('')}
-  </div>`}
-
-  <!-- Notes Grid -->
+  <!-- Grid: folder tiles and loose notes share one ordering -->
   <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-    ${notes.length === 0 ? `` : notes.map((note, index) => `
-    <div class="note-card bg-white/30 backdrop-blur-sm rounded-xl border border-gray-200 p-4 hover:shadow-lg hover:bg-white/60 transition relative group" draggable="false" data-note-id="${note.id}" data-index="${index}">
+    ${gridItems.length === 0 ? `` : gridItems.map((item, index) => item.kind === 'folder' ? `
+    <div class="note-card folder-tile bg-white/20 backdrop-blur-sm rounded-xl p-4 hover:shadow-lg hover:bg-white/40 transition relative group" draggable="false" data-folder-id="${item.folder.id}" data-index="${index}">
       <div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="9" cy="6" r="2"/>
@@ -79,12 +80,32 @@
           <circle cx="15" cy="18" r="2"/>
         </svg>
       </div>
-      <a href="/note/${note.id}" class="block pl-6">
-        <h3 class="font-semibold text-gray-800 mb-2 truncate pr-8" style="font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem;">${note.title || 'Untitled'}</h3>
-        ${note.folder_name ? `<span class="folder-badge inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded mb-2 hover:bg-gray-200 cursor-pointer" onclick="event.preventDefault(); event.stopPropagation(); window.location.href='/folder/${note.folder_id}'">${note.folder_name}</span>` : ''}
-        <p class="text-sm text-gray-500">Updated ${new Date(note.updated_at).toLocaleDateString()}</p>
+      <div class="block pl-6 cursor-pointer">
+        <div class="grid grid-cols-2 gap-1.5 mb-2 pointer-events-none">
+          ${item.folder.notes.slice(0, 4).map(n => `<div class="mini-note">${n.title || 'Untitled'}</div>`).join('')}
+          ${item.folder.notes.length < 4 ? Array(4 - Math.min(item.folder.notes.length, 4)).fill('<div class="mini-note mini-empty"></div>').join('') : ''}
+        </div>
+        <h3 class="font-semibold text-gray-800 truncate pr-8" style="font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem;">${item.folder.name}</h3>
+        <p class="text-sm text-gray-500">${item.folder.notes.length} notes</p>
+      </div>
+    </div>
+    ` : `
+    <div class="note-card bg-white/30 backdrop-blur-sm rounded-xl border border-gray-200 p-4 hover:shadow-lg hover:bg-white/60 transition relative group" draggable="false" data-note-id="${item.note.id}" data-index="${index}">
+      <div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="9" cy="6" r="2"/>
+          <circle cx="9" cy="12" r="2"/>
+          <circle cx="9" cy="18" r="2"/>
+          <circle cx="15" cy="6" r="2"/>
+          <circle cx="15" cy="12" r="2"/>
+          <circle cx="15" cy="18" r="2"/>
+        </svg>
+      </div>
+      <a href="/note/${item.note.id}" class="block pl-6">
+        <h3 class="font-semibold text-gray-800 mb-2 truncate pr-8" style="font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem;">${item.note.title || 'Untitled'}</h3>
+        <p class="text-sm text-gray-500">Updated ${new Date(item.note.updated_at).toLocaleDateString()}</p>
       </a>
-      <button onclick="confirmDeleteNote(${note.id}, '${(note.title || 'Untitled').replace(/'/g, "\\'")}')"
+      <button onclick="confirmDeleteNote(${item.note.id}, '${(item.note.title || 'Untitled').replace(/'/g, "\\'")}')"
               class="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
               title="Delete note">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -137,8 +158,22 @@
   </div>
 </div>
 
+<!-- Folder overlay (iOS-style expanded folder) -->
+<div id="folder-overlay" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center">
+  <div id="folder-overlay-panel" class="bg-white/85 backdrop-blur-md rounded-2xl p-6 w-full max-w-2xl mx-4 shadow-2xl" style="max-height: 70vh; overflow-y: auto;">
+    <h2 id="folder-overlay-title" class="text-xl font-bold text-gray-800 mb-4 truncate" style="font-family: 'Space Grotesk', sans-serif;">Folder</h2>
+    <div id="folder-overlay-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+    <p class="text-xs text-gray-500 mt-4">Drag a note out of this panel to remove it from the folder. Touch and hold the folder name on the home screen to rename it.</p>
+  </div>
+</div>
+
 <script>
   var currentFolderId = '${typeof currentFolder !== 'undefined' && currentFolder ? currentFolder.id : ''}';
+  var FOLDERS_DATA = ${JSON.stringify(foldersWithNotes.map(f => ({
+    id: f.id,
+    name: f.name,
+    notes: f.notes.map(n => ({ id: n.id, title: n.title, updated_at: n.updated_at }))
+  }))).replace(/</g, '\\u003c')};
   var noteToDelete = null;
 
   // Long-press a note card to rename it inline; a quick tap opens the note
@@ -149,6 +184,7 @@
 
   function startInlineRename(card) {
     var noteId = card.dataset.noteId;
+    var folderId = card.dataset.folderId;
     var h3 = card.querySelector('h3');
     if (!h3 || h3.querySelector('input')) return;
 
@@ -171,16 +207,22 @@
 
       if (save && newTitle && newTitle !== current) {
         h3.textContent = newTitle;
-        fetch('/note/' + noteId + '/title', {
+        var url = folderId ? '/folder/' + folderId + '/rename' : '/note/' + noteId + '/title';
+        var body = folderId ? { name: newTitle } : { title: newTitle };
+        fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: newTitle })
+          body: JSON.stringify(body)
         }).then(function(r) { return r.json(); })
           .then(function(result) {
             if (!result.success) throw new Error(result.error || 'Rename failed');
+            if (folderId) {
+              var f = FOLDERS_DATA.find(function(x) { return x.id === parseInt(folderId); });
+              if (f) f.name = newTitle;
+            }
           }).catch(function(err) {
             h3.textContent = current;
-            alert('Failed to rename note: ' + err.message);
+            alert('Failed to rename: ' + err.message);
           });
       } else {
         h3.textContent = current;
@@ -198,7 +240,7 @@
 
   document.addEventListener('pointerdown', function(e) {
     var card = e.target.closest('.note-card');
-    if (!card || e.target.closest('button') || e.target.closest('input') || e.target.closest('.note-drag-handle') || e.target.closest('.folder-badge')) return;
+    if (!card || e.target.closest('button') || e.target.closest('input') || e.target.closest('.note-drag-handle')) return;
     pressStart = { x: e.clientX, y: e.clientY };
     pressTimer = setTimeout(function() {
       pressTimer = null;
@@ -230,6 +272,99 @@
       suppressClick = false;
     }
   }, true);
+
+  // ============= FOLDER OVERLAY (iOS-style) =============
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  var overlayDraggedNoteId = null;
+
+  function openFolderOverlay(folderId) {
+    var folder = FOLDERS_DATA.find(function(f) { return f.id === folderId; });
+    if (!folder) return;
+
+    document.getElementById('folder-overlay-title').textContent = folder.name;
+    var grid = document.getElementById('folder-overlay-grid');
+    grid.innerHTML = folder.notes.map(function(n) {
+      return '<div class="overlay-note bg-white rounded-lg p-3 shadow cursor-pointer hover:shadow-md" draggable="true" data-note-id="' + n.id + '">' +
+        '<h4 class="font-semibold text-gray-800 truncate text-sm">' + escapeHtml(n.title || 'Untitled') + '</h4>' +
+        '<p class="text-xs text-gray-500 mt-1">' + new Date(n.updated_at).toLocaleDateString() + '</p>' +
+        '</div>';
+    }).join('');
+
+    grid.querySelectorAll('.overlay-note').forEach(function(el) {
+      el.addEventListener('click', function() {
+        window.location.href = '/note/' + el.dataset.noteId;
+      });
+      el.addEventListener('dragstart', function(e) {
+        overlayDraggedNoteId = el.dataset.noteId;
+        el.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      el.addEventListener('dragend', function() {
+        el.style.opacity = '1';
+        overlayDraggedNoteId = null;
+      });
+    });
+
+    document.getElementById('folder-overlay').classList.remove('hidden');
+  }
+
+  function closeFolderOverlay() {
+    document.getElementById('folder-overlay').classList.add('hidden');
+  }
+
+  // Tap a folder tile to open it
+  document.addEventListener('click', function(e) {
+    var tile = e.target.closest('.folder-tile');
+    if (tile && !e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.note-drag-handle')) {
+      openFolderOverlay(parseInt(tile.dataset.folderId));
+    }
+  });
+
+  // Backdrop: tap closes; dropping an overlay note on it pulls the note
+  // out of the folder
+  var folderOverlay = document.getElementById('folder-overlay');
+  folderOverlay.addEventListener('click', function(e) {
+    if (e.target === folderOverlay) closeFolderOverlay();
+  });
+  folderOverlay.addEventListener('dragover', function(e) {
+    if (overlayDraggedNoteId && e.target === folderOverlay) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+  });
+  folderOverlay.addEventListener('drop', function(e) {
+    if (overlayDraggedNoteId && e.target === folderOverlay) {
+      e.preventDefault();
+      moveNoteToFolder(overlayDraggedNoteId, null);
+    }
+  });
+
+  function moveNoteToFolder(noteId, folderId) {
+    fetch('/note/' + noteId + '/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder_id: folderId })
+    }).then(function(r) { return r.json(); })
+      .then(function() { window.location.reload(); })
+      .catch(function(err) { alert('Failed to move note: ' + err.message); });
+  }
+
+  function createFolderFromNotes(targetNoteId, droppedNoteId) {
+    fetch('/folders/create-from-notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetNoteId: targetNoteId, droppedNoteId: droppedNoteId })
+    }).then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (!result.success) throw new Error(result.error || 'Failed');
+        window.location.reload();
+      })
+      .catch(function(err) { alert('Failed to create folder: ' + err.message); });
+  }
 
   function confirmDeleteNote(noteId, noteTitle) {
     noteToDelete = noteId;
@@ -353,6 +488,22 @@
     });
   });
 
+  var combineTarget = null;
+
+  function setCombineTarget(card) {
+    if (combineTarget === card) return;
+    clearCombineTarget();
+    combineTarget = card;
+    card.classList.add('combine-target');
+  }
+
+  function clearCombineTarget() {
+    if (combineTarget) {
+      combineTarget.classList.remove('combine-target');
+      combineTarget = null;
+    }
+  }
+
   document.querySelectorAll('.note-card').forEach(function(card) {
     card.addEventListener('dragstart', function(e) {
       draggedCard = card;
@@ -370,37 +521,74 @@
       if (dragPlaceholder && dragPlaceholder.parentNode) {
         dragPlaceholder.parentNode.removeChild(dragPlaceholder);
       }
+      var target = combineTarget;
+      clearCombineTarget();
+      var dragged = draggedCard;
       draggedCard = null;
       dragPlaceholder = null;
-      saveNoteOrder();
+
+      // Dropped centred on another card: combine (iOS folder behaviour)
+      if (target && dragged && dragged.dataset.noteId) {
+        if (target.dataset.folderId) {
+          moveNoteToFolder(dragged.dataset.noteId, parseInt(target.dataset.folderId));
+        } else if (target.dataset.noteId) {
+          createFolderFromNotes(parseInt(target.dataset.noteId), parseInt(dragged.dataset.noteId));
+        }
+        return;
+      }
+
+      saveGridOrder();
     });
 
     card.addEventListener('dragover', function(e) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
 
-      if (draggedCard && draggedCard !== card) {
-        var grid = document.getElementById('notes-grid');
-        var cards = Array.from(grid.querySelectorAll('.note-card'));
-        var draggedIndex = cards.indexOf(draggedCard);
-        var targetIndex = cards.indexOf(card);
+      if (!draggedCard || draggedCard === card) return;
 
-        if (draggedIndex < targetIndex) {
-          card.parentNode.insertBefore(dragPlaceholder, card.nextSibling);
-          card.parentNode.insertBefore(draggedCard, card.nextSibling);
-        } else {
-          card.parentNode.insertBefore(dragPlaceholder, card);
-          card.parentNode.insertBefore(draggedCard, card);
-        }
+      // Hovering a note over the centre of another note or a folder tile
+      // means combine/move-in; edges mean reorder
+      var draggedIsNote = !!draggedCard.dataset.noteId;
+      var rect = card.getBoundingClientRect();
+      var inCentre =
+        e.clientX > rect.left + rect.width * 0.2 &&
+        e.clientX < rect.right - rect.width * 0.2 &&
+        e.clientY > rect.top + rect.height * 0.25 &&
+        e.clientY < rect.bottom - rect.height * 0.25;
+
+      if (draggedIsNote && inCentre) {
+        setCombineTarget(card);
+        return;
       }
+
+      clearCombineTarget();
+
+      var grid = document.getElementById('notes-grid');
+      var cards = Array.from(grid.querySelectorAll('.note-card'));
+      var draggedIndex = cards.indexOf(draggedCard);
+      var targetIndex = cards.indexOf(card);
+
+      if (draggedIndex < targetIndex) {
+        card.parentNode.insertBefore(dragPlaceholder, card.nextSibling);
+        card.parentNode.insertBefore(draggedCard, card.nextSibling);
+      } else {
+        card.parentNode.insertBefore(dragPlaceholder, card);
+        card.parentNode.insertBefore(draggedCard, card);
+      }
+    });
+
+    card.addEventListener('dragleave', function() {
+      if (combineTarget === card) clearCombineTarget();
     });
   });
 
-  function saveNoteOrder() {
+  function saveGridOrder() {
     var grid = document.getElementById('notes-grid');
     var cards = Array.from(grid.querySelectorAll('.note-card'));
     var order = cards.map(function(card) {
-      return parseInt(card.dataset.noteId);
+      return card.dataset.folderId
+        ? { type: 'folder', id: parseInt(card.dataset.folderId) }
+        : { type: 'note', id: parseInt(card.dataset.noteId) };
     });
 
     fetch('/notes/reorder', {

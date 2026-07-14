@@ -80,10 +80,22 @@ router.get('/', requireAuth, async (req, res) => {
     ORDER BY n.sort_order, n.updated_at DESC
   `);
 
+  // iOS-style home grid: folder tiles and loose notes share one ordering
+  const foldersWithNotes = folders.map(f => ({
+    ...f,
+    notes: notes.filter(n => n.folder_id === f.id)
+  }));
+  const gridItems = [
+    ...foldersWithNotes.map(f => ({ kind: 'folder', sort: f.sort_order || 0, folder: f })),
+    ...notes.filter(n => !n.folder_id).map(n => ({ kind: 'note', sort: n.sort_order || 0, note: n }))
+  ].sort((a, b) => a.sort - b.sort);
+
   res.render('notes/index', {
     title: 'Notes',
     folders,
     notes,
+    foldersWithNotes,
+    gridItems,
     currentFolder: null
   });
 });
@@ -110,8 +122,29 @@ router.get('/folder/:id', requireAuth, async (req, res) => {
     title: currentFolder.name,
     folders,
     notes,
+    foldersWithNotes: [],
+    gridItems: notes.map(n => ({ kind: 'note', note: n })),
     currentFolder
   });
+});
+
+// Create a folder from two notes (iOS-style: drop one note onto another)
+router.post('/folders/create-from-notes', requireAuth, async (req, res) => {
+  const { targetNoteId, droppedNoteId } = req.body;
+  const target = await dbGet('SELECT id, sort_order FROM notes WHERE id = ?', [targetNoteId]);
+  const dropped = await dbGet('SELECT id FROM notes WHERE id = ?', [droppedNoteId]);
+  if (!target || !dropped || target.id === dropped.id) {
+    return res.status(400).json({ error: 'Invalid notes' });
+  }
+
+  const result = await dbRun(
+    'INSERT INTO folders (name, sort_order) VALUES (?, ?)',
+    ['Folder', target.sort_order || 0]
+  );
+  const folderId = result.lastInsertRowid;
+  await dbRun('UPDATE notes SET folder_id = ? WHERE id IN (?, ?)', [folderId, target.id, dropped.id]);
+
+  res.json({ success: true, folderId });
 });
 
 // Create folder
@@ -218,10 +251,30 @@ router.post('/note/:id/title', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-// Move note to folder
+// A folder left with one note reverts to a loose note; empty folders vanish
+async function dissolveFolderIfNeeded(folderId) {
+  if (!folderId) return;
+  const remaining = await dbAll('SELECT id FROM notes WHERE folder_id = ?', [folderId]);
+  if (remaining.length > 1) return;
+
+  if (remaining.length === 1) {
+    const folder = await dbGet('SELECT sort_order FROM folders WHERE id = ?', [folderId]);
+    await dbRun(
+      'UPDATE notes SET folder_id = NULL, sort_order = ? WHERE id = ?',
+      [folder?.sort_order || 0, remaining[0].id]
+    );
+  }
+  await dbRun('DELETE FROM folders WHERE id = ?', [folderId]);
+}
+
+// Move note to folder (folder_id null = out of its folder)
 router.post('/note/:id/move', requireAuth, async (req, res) => {
   const { folder_id } = req.body;
+  const note = await dbGet('SELECT folder_id FROM notes WHERE id = ?', [req.params.id]);
   await dbRun('UPDATE notes SET folder_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [folder_id || null, req.params.id]);
+  if (note && note.folder_id && note.folder_id !== (folder_id || null)) {
+    await dissolveFolderIfNeeded(note.folder_id);
+  }
   res.json({ success: true });
 });
 
@@ -371,7 +424,15 @@ router.post('/notes/reorder', requireAuth, async (req, res) => {
 
   try {
     for (let i = 0; i < order.length; i++) {
-      await dbRun('UPDATE notes SET sort_order = ? WHERE id = ?', [i, order[i]]);
+      const item = order[i];
+      if (item && typeof item === 'object' && item.type === 'folder') {
+        await dbRun('UPDATE folders SET sort_order = ? WHERE id = ?', [i, item.id]);
+      } else if (item && typeof item === 'object') {
+        await dbRun('UPDATE notes SET sort_order = ? WHERE id = ?', [i, item.id]);
+      } else {
+        // Legacy: plain array of note ids
+        await dbRun('UPDATE notes SET sort_order = ? WHERE id = ?', [i, item]);
+      }
     }
     res.json({ success: true });
   } catch (err) {
