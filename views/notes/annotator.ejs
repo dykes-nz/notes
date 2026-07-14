@@ -1332,7 +1332,7 @@
     var ANNOTATOR_MODE = '<%= mode %>';
     var OPENAI_CONFIGURED = <%= openaiConfigured %>;
     <% if (mode === 'pdf' && note.pdf_filename) { %>
-    var PDF_FILE_URL = '/uploads/<%= note.pdf_filename %>';
+    var PDF_FILE_URL = '/note/<%= note.id %>/pdf';
     <% } else { %>
     var PDF_FILE_URL = null;
     <% } %>

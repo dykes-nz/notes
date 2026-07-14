@@ -8,23 +8,11 @@ const openai = require('../utils/openai');
 
 const router = express.Router();
 
-// Configure multer for PDF uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(7)}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
-});
-
+// Configure multer for PDF uploads. PDFs are held in memory and stored
+// in the database - the container filesystem is ephemeral on Railway,
+// so files written to disk vanish on every deploy/restart.
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
@@ -170,13 +158,39 @@ router.post('/note/pdf', requireAuth, upload.single('pdf'), async (req, res) => 
 
   const title = req.body.title || req.file.originalname.replace('.pdf', '');
   const folderId = req.body.folder_id || null;
+  // pdf_filename doubles as the "this note has a PDF" marker
+  const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(7)}.pdf`;
 
   const result = await dbRun(
-    'INSERT INTO notes (title, folder_id, pdf_filename, pdf_original_name) VALUES (?, ?, ?, ?)',
-    [title, folderId, req.file.filename, req.file.originalname]
+    'INSERT INTO notes (title, folder_id, pdf_filename, pdf_original_name, pdf_data) VALUES (?, ?, ?, ?, ?)',
+    [title, folderId, uniqueName, req.file.originalname, req.file.buffer]
   );
 
   res.json({ success: true, noteId: result.lastInsertRowid });
+});
+
+// Serve a note's PDF from the database (legacy notes fall back to disk)
+router.get('/note/:id/pdf', requireAuth, async (req, res) => {
+  const note = await dbGet('SELECT pdf_data, pdf_filename, pdf_original_name FROM notes WHERE id = ?', [req.params.id]);
+  if (!note) {
+    return res.status(404).send('Note not found');
+  }
+
+  if (note.pdf_data) {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return res.send(note.pdf_data);
+  }
+
+  // Legacy: PDFs uploaded before database storage lived on disk
+  if (note.pdf_filename) {
+    const filePath = path.join(__dirname, '..', 'public', 'uploads', note.pdf_filename);
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    }
+  }
+
+  res.status(404).send('PDF not found');
 });
 
 // View/Edit note (the annotator IS the note view)

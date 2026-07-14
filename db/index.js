@@ -48,6 +48,13 @@ if (databaseUrl) {
         (match, sign, num, unit) => `(CURRENT_DATE ${sign} INTERVAL '${num} ${unit}')`);
       pgSql = pgSql.replace(/INSERT OR IGNORE/gi, 'INSERT');
 
+      // Postgres only reports the new row id via RETURNING - without this,
+      // lastInsertRowid was always null on Railway (every table we insert
+      // into via prepared statements has an id column)
+      if (/^\s*insert\b/i.test(pgSql) && !/\breturning\b/i.test(pgSql)) {
+        pgSql += ' RETURNING id';
+      }
+
       return {
         sql: pgSql,
 

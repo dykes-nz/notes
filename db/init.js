@@ -80,6 +80,7 @@ function initSQLite() {
     { name: 'current_page', type: 'INTEGER DEFAULT 1' },
     { name: 'pdf_filename', type: 'TEXT' },
     { name: 'pdf_original_name', type: 'TEXT' },
+    { name: 'pdf_data', type: 'BLOB' },
     { name: 'transcript', type: 'TEXT' },
     { name: 'summary', type: 'TEXT' }
   ];
@@ -216,6 +217,9 @@ async function initPostgres() {
       END IF;
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='notes' AND column_name='summary') THEN
         ALTER TABLE notes ADD COLUMN summary TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='notes' AND column_name='pdf_data') THEN
+        ALTER TABLE notes ADD COLUMN pdf_data BYTEA;
       END IF;
     END $$;
 

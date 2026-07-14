@@ -173,10 +173,21 @@
     fetch('/note/pdf', {
       method: 'POST',
       body: formData
-    }).then(function(r) { return r.json(); })
+    }).then(function(r) {
+        if (!r.ok) {
+          return r.json().catch(function() { return {}; }).then(function(body) {
+            throw new Error(body.error || ('Server error ' + r.status));
+          });
+        }
+        return r.json();
+      })
       .then(function(result) {
-        if (result.noteId) {
+        if (result.success && result.noteId) {
           window.location.href = '/note/' + result.noteId;
+        } else if (result.success) {
+          // Created but no id returned - refresh the list rather than
+          // reporting a false failure
+          window.location.reload();
         } else {
           throw new Error(result.error || 'Upload failed');
         }
