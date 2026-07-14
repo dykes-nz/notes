@@ -1645,6 +1645,7 @@
   // ============= AUDIO RECORDING =============
 
   let mediaRecorder = null;
+  let currentMimeType = 'audio/webm';
   let audioChunks = [];
   let recordingStartTime = null;
   let recordingInterval = null;
@@ -1672,15 +1673,15 @@
   window.toggleAudioCollapse = function() {
     const panel = document.getElementById('audio-panel');
     const container = document.querySelector('.annotator-container');
-    const miniBtn = document.getElementById('audio-record-btn-mini');
+    const fab = document.getElementById('audio-mini-fab');
 
     if (panel) {
-      panel.classList.toggle('collapsed');
-      container?.classList.toggle('audio-panel-collapsed', panel.classList.contains('collapsed'));
+      const isCollapsed = panel.classList.toggle('collapsed');
+      container?.classList.toggle('audio-panel-collapsed', isCollapsed);
 
-      // Show mini record button when collapsed
-      if (miniBtn) {
-        miniBtn.style.display = panel.classList.contains('collapsed') ? 'flex' : 'none';
+      // Show/hide FAB
+      if (fab) {
+        fab.classList.toggle('visible', isCollapsed);
       }
     }
   };
@@ -1750,11 +1751,25 @@
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Use webm/opus for better compatibility
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm';
+      // Detect best audio format - Safari needs mp4, others prefer webm
+      let mimeType = 'audio/webm';
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
+      if (isSafari || MediaRecorder.isTypeSupported('audio/mp4')) {
+        // Safari/iOS: use mp4 (produces valid files)
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+          mimeType = 'audio/aac';
+        } else if (MediaRecorder.isTypeSupported('audio/mpeg')) {
+          mimeType = 'audio/mpeg';
+        }
+      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus';
+      }
+
+      console.log('Recording with mimeType:', mimeType);
+      currentMimeType = mimeType;
       mediaRecorder = new MediaRecorder(stream, { mimeType });
       audioChunks = [];
 
@@ -1773,21 +1788,21 @@
       const recordIcon = document.getElementById('audio-record-icon');
       const statusText = document.getElementById('audio-status-text');
       const durationEl = document.getElementById('audio-duration');
-      const recordBtnMini = document.getElementById('audio-record-btn-mini');
-      const recordIconMini = document.getElementById('audio-record-icon-mini');
-      const durationMiniEl = document.getElementById('audio-duration-mini');
+      const fab = document.getElementById('audio-mini-fab');
+      const fabIcon = document.getElementById('audio-fab-icon');
+      const fabDuration = document.getElementById('audio-fab-duration');
 
       recordBtn?.classList.add('recording');
-      recordBtnMini?.classList.add('recording');
+      fab?.classList.add('recording');
       if (recordIcon) {
         recordIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
       }
-      if (recordIconMini) {
-        recordIconMini.innerHTML = '<rect x="8" y="8" width="8" height="8" rx="1"/>';
+      if (fabIcon) {
+        fabIcon.innerHTML = '<rect x="7" y="7" width="10" height="10" rx="2"/>';
       }
       if (statusText) statusText.textContent = 'Recording...';
       durationEl?.classList.remove('hidden');
-      durationMiniEl?.classList.remove('hidden');
+      if (fabDuration) fabDuration.style.display = 'block';
 
       // Update duration display
       recordingInterval = setInterval(updateDuration, 1000);
@@ -1827,20 +1842,20 @@
     const recordBtn = document.getElementById('audio-record-btn');
     const recordIcon = document.getElementById('audio-record-icon');
     const statusText = document.getElementById('audio-status-text');
-    const recordBtnMini = document.getElementById('audio-record-btn-mini');
-    const recordIconMini = document.getElementById('audio-record-icon-mini');
-    const durationMiniEl = document.getElementById('audio-duration-mini');
+    const fab = document.getElementById('audio-mini-fab');
+    const fabIcon = document.getElementById('audio-fab-icon');
+    const fabDuration = document.getElementById('audio-fab-duration');
 
     recordBtn?.classList.remove('recording');
-    recordBtnMini?.classList.remove('recording');
+    fab?.classList.remove('recording');
     if (recordIcon) {
       recordIcon.innerHTML = '<circle cx="12" cy="12" r="10"/>';
     }
-    if (recordIconMini) {
-      recordIconMini.innerHTML = '<circle cx="12" cy="12" r="8"/>';
+    if (fabIcon) {
+      fabIcon.innerHTML = '<circle cx="12" cy="12" r="10"/>';
     }
     if (statusText) statusText.textContent = 'Tap to record';
-    durationMiniEl?.classList.add('hidden');
+    if (fabDuration) fabDuration.style.display = 'none';
   }
 
   function updateDuration() {
@@ -1850,23 +1865,35 @@
     const timeStr = mins + ':' + secs;
 
     const durationEl = document.getElementById('audio-duration');
-    const durationMiniEl = document.getElementById('audio-duration-mini');
+    const fabDuration = document.getElementById('audio-fab-duration');
     if (durationEl) {
       durationEl.textContent = timeStr;
     }
-    if (durationMiniEl) {
-      durationMiniEl.textContent = timeStr;
+    if (fabDuration) {
+      fabDuration.textContent = timeStr;
     }
   }
 
   async function sendForTranscription() {
     if (audioChunks.length === 0) return;
 
-    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+    const blob = new Blob(audioChunks, { type: currentMimeType });
     audioChunks = []; // Clear for next batch
 
+    // Determine file extension from mimeType
+    let ext = 'webm';
+    if (currentMimeType.includes('mp4') || currentMimeType.includes('m4a')) {
+      ext = 'mp4';
+    } else if (currentMimeType.includes('mp3') || currentMimeType.includes('mpeg')) {
+      ext = 'mp3';
+    } else if (currentMimeType.includes('aac')) {
+      ext = 'm4a';
+    } else if (currentMimeType.includes('ogg')) {
+      ext = 'ogg';
+    }
+
     const formData = new FormData();
-    formData.append('audio', blob, 'recording.webm');
+    formData.append('audio', blob, 'recording.' + ext);
 
     try {
       const response = await fetch('/note/' + NOTE_ID + '/transcribe', {

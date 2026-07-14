@@ -580,21 +580,12 @@
       }
 
       .audio-panel.collapsed {
-        width: auto;
-        min-width: 180px;
-      }
-
-      .audio-panel.collapsed .audio-panel-content {
-        display: none;
+        transform: translateX(100%);
       }
 
       /* Adjust canvas viewer when panel is open */
-      .annotator-container.audio-panel-open #canvas-viewer {
+      .annotator-container.audio-panel-open:not(.audio-panel-collapsed) #canvas-viewer {
         margin-right: 320px;
-      }
-
-      .annotator-container.audio-panel-open.audio-panel-collapsed #canvas-viewer {
-        margin-right: 180px;
       }
     }
 
@@ -619,57 +610,81 @@
       }
 
       .audio-panel.collapsed {
-        height: auto;
-        max-height: none;
-      }
-
-      .audio-panel.collapsed .audio-panel-content {
-        display: none;
+        transform: translateY(100%);
       }
     }
 
-    .audio-collapse-btn {
-      background: none;
+    /* Floating mini record button when collapsed */
+    .audio-mini-fab {
+      position: fixed;
+      z-index: 901;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: white;
       border: none;
-      padding: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       cursor: pointer;
-      color: #6b7280;
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
-      transition: color 0.2s;
+      transition: transform 0.2s, box-shadow 0.2s;
     }
 
-    .audio-collapse-btn:hover {
-      color: #374151;
+    .audio-mini-fab:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.2);
     }
 
-    .audio-collapse-btn svg {
-      transition: transform 0.3s ease;
+    .audio-mini-fab:active {
+      transform: scale(0.95);
     }
 
-    .audio-panel.collapsed .audio-collapse-btn svg {
-      transform: rotate(180deg);
+    .audio-mini-fab.visible {
+      display: flex;
     }
 
-    .audio-record-btn-mini {
-      background: none;
-      border: none;
-      padding: 4px;
-      cursor: pointer;
+    .audio-mini-fab.recording {
+      background: #fef2f2;
+      animation: fab-pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes fab-pulse {
+      0%, 100% { box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+      50% { box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5); }
+    }
+
+    .audio-mini-fab svg {
       color: #ef4444;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
-    .audio-record-btn-mini.recording {
-      animation: pulse-mini 1.5s ease-in-out infinite;
+    .audio-mini-fab .fab-duration {
+      position: absolute;
+      bottom: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: #6b7280;
+      white-space: nowrap;
+      background: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
     }
 
-    @keyframes pulse-mini {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+    /* Position: bottom-right on desktop, bottom-center on mobile */
+    @media (min-width: 768px) {
+      .audio-mini-fab {
+        bottom: 24px;
+        right: 24px;
+      }
+    }
+
+    @media (max-width: 767px) {
+      .audio-mini-fab {
+        bottom: 24px;
+        right: 24px;
+      }
     }
 
     .audio-panel-header {
@@ -760,6 +775,14 @@
 
     .audio-duration.hidden {
       display: none;
+    }
+
+    .audio-panel-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
     }
 
     .audio-transcript-container {
@@ -1143,25 +1166,25 @@
     </div>
   </div>
 
+  <!-- Floating mini audio button (shown when panel is collapsed) -->
+  <button id="audio-mini-fab" class="audio-mini-fab" onclick="toggleAudioCollapse()">
+    <svg id="audio-fab-icon" fill="currentColor" viewBox="0 0 24 24" width="28" height="28">
+      <circle cx="12" cy="12" r="10"/>
+    </svg>
+    <span id="audio-fab-duration" class="fab-duration" style="display: none;"></span>
+  </button>
+
   <!-- Audio Panel (sidebar on iPad, bottom bar on mobile) -->
   <div id="audio-panel" class="audio-panel hidden">
     <div class="audio-panel-header">
+      <h3>Audio Recording</h3>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <button onclick="toggleAudioCollapse()" class="audio-collapse-btn" title="Collapse/Expand">
+        <button onclick="toggleAudioCollapse()" class="audio-collapse-btn" title="Collapse">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
-        <h3>Audio Recording</h3>
-      </div>
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <button id="audio-record-btn-mini" onclick="toggleRecording()" class="audio-record-btn-mini" style="display: none;">
-          <svg id="audio-record-icon-mini" fill="currentColor" viewBox="0 0 24 24" width="20" height="20">
-            <circle cx="12" cy="12" r="8"/>
-          </svg>
-        </button>
-        <span id="audio-duration-mini" class="audio-duration hidden" style="font-size: 12px; color: #6b7280;"></span>
-        <button onclick="toggleAudioPanel()" class="audio-close-btn">
+        <button onclick="toggleAudioPanel()" class="audio-close-btn" title="Close">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
           </svg>
