@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - Notes</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Inter', sans-serif; }
@@ -27,22 +27,34 @@
   </script>
 </head>
 <body class="bg-random min-h-screen flex items-center justify-center">
-  <div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-8 w-full max-w-md mx-4">
-    <div class="text-center mb-8">
-      <h1 class="text-2xl font-semibold text-gray-800 mb-2">Notes</h1>
-      <p class="text-gray-600"><%= setupNeeded ? 'Set up your passkey to get started' : 'Sign in with Face ID / Touch ID' %></p>
-    </div>
+  <div class="text-center p-8 w-full max-w-md mx-4">
+    <!-- Quill and book SVG -->
+    <svg class="w-48 h-48 mx-auto mb-6" viewBox="0 0 92.69 75.53" fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+      <path d="M48.99,65.62c-7.6-14.01-17.33-18.52-28.96-22.13l14.96-24.21c5.03.08,7.28,1.21,10.19,4.91"/>
+      <path d="M37.17,57.88c-8.12-6.51-18.33-9.59-29.11-10.37l20.07-27.78"/>
+      <path d="M41.55,64c-12.49-4.65-23.16-7.25-34.69-6.78l2.26-3.85"/>
+      <path d="M43.81,68.52c-12.76-3.19-23.63-3.22-35.75-3.59l1.2-3.19"/>
+      <path d="M51.26,31.47c-.76,1.56-.48,2.25.38,3.43,2.77-1.49,7.04-5.42,11.36-9.44"/>
+      <path d="M46.28,44.53c2.89-1.9,4.8-3.35,7.3-6.16,2.44,1.38,4.74.49,7.69-.45"/>
+      <path d="M61.7,33.63c1.54,1.03,3.41.76,5.06.25,2.95-1.65,5.19-2.89,7.26-5.38-1.79-.36-3.35-.95-4.51-1.97"/>
+      <path d="M52.72,27.86c.94-3.24,1.33-4.9,4.34-6.8"/>
+      <path d="M60.66,21.36c.89-2.93,2.83-5.01,5.37-6.5"/>
+      <path d="M69.63,16.35c.12-5.47,11.61-5.95,18.01-5.85-7.24,5.56-8.25,12.18-11.64,14.86"/>
+    </svg>
+
+    <h1 class="text-3xl font-bold text-white mb-2" style="text-shadow: 0 2px 4px rgba(0,0,0,0.4); font-family: 'Space Grotesk', sans-serif;">Notes</h1>
+    <p class="text-white/80 mb-8" style="text-shadow: 0 1px 2px rgba(0,0,0,0.4);"><%= setupNeeded ? 'Set up your passkey to get started' : 'Sign in with Face ID / Touch ID' %></p>
 
     <div id="passkey-section">
       <button type="button" id="passkey-btn" onclick="<%= setupNeeded ? 'setupPasskey()' : 'loginWithPasskey()' %>"
-              class="w-full flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              class="w-full flex items-center justify-center px-6 py-4 bg-white/20 backdrop-blur-sm text-white rounded-xl hover:bg-white/30 transition border border-white/30" style="text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
+        <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"/>
         </svg>
         <%= setupNeeded ? 'Set up Face ID / Touch ID' : 'Sign in with Face ID / Touch ID' %>
       </button>
 
-      <p id="status" class="mt-4 text-center text-sm text-gray-600"></p>
+      <p id="status" class="mt-4 text-center text-sm text-white/80" style="text-shadow: 0 1px 2px rgba(0,0,0,0.3);"></p>
     </div>
   </div>
 
