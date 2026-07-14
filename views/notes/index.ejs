@@ -82,10 +82,6 @@
     text-overflow: ellipsis;
     line-height: 22px;
   }
-  .mini-note.mini-empty {
-    background: rgba(255,255,255,0.3);
-    border-style: dashed;
-  }
   /* Drop-to-combine highlight (iOS folder-creation hover) */
   .combine-target {
     outline: 3px solid #3b82f6;
@@ -125,7 +121,6 @@
       <div class="block pl-6 cursor-pointer">
         <div class="grid grid-cols-2 gap-1.5 mb-2 pointer-events-none">
           ${item.folder.notes.slice(0, 4).map(n => `<div class="mini-note">${n.title || 'Untitled'}</div>`).join('')}
-          ${item.folder.notes.length < 4 ? Array(4 - Math.min(item.folder.notes.length, 4)).fill('<div class="mini-note mini-empty"></div>').join('') : ''}
         </div>
         <h3 class="font-semibold text-gray-800 truncate pr-8" style="font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem;">${item.folder.name}</h3>
         <p class="text-sm text-gray-500">${item.folder.notes.length} notes</p>
@@ -160,7 +155,7 @@
 </div>
 
 <!-- Delete Confirmation Modal -->
-<div id="delete-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+<div id="delete-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center" style="z-index: 70;">
   <div class="bg-white rounded-xl p-6 w-full max-w-sm mx-4">
     <h3 class="text-lg font-semibold text-gray-800 mb-3">Delete Note</h3>
     <p class="text-gray-600 mb-4">Are you sure you want to delete "<span id="delete-note-title" class="font-medium"></span>"? This will permanently remove the note and all its contents.</p>
@@ -207,10 +202,10 @@
   </svg>
 </button>
 
-<!-- Folder overlay (iOS-style expanded folder) -->
-<div id="folder-overlay" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center">
-  <div id="folder-overlay-panel" class="bg-white/85 backdrop-blur-md rounded-2xl p-6 w-full max-w-2xl mx-4 shadow-2xl" style="max-height: 70vh; overflow-y: auto;">
-    <div id="folder-overlay-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+<!-- Expanded folder (the tile slides and grows to screen centre) -->
+<div id="folder-overlay" class="fixed inset-0 bg-black bg-opacity-25 z-50 hidden flex items-center justify-center">
+  <div id="folder-overlay-panel" class="bg-white/40 backdrop-blur-md rounded-2xl p-5 w-full max-w-2xl mx-4 shadow-2xl" style="max-height: 70vh; overflow-y: auto; border: 2px solid rgba(255,255,255,0.7); will-change: transform;">
+    <div id="folder-overlay-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
   </div>
 </div>
 
@@ -266,6 +261,13 @@
             if (folderId) {
               var f = FOLDERS_DATA.find(function(x) { return x.id === parseInt(folderId); });
               if (f) f.name = newTitle;
+            } else {
+              // Keep folder data in sync if this note lives in a folder
+              FOLDERS_DATA.forEach(function(fd) {
+                fd.notes.forEach(function(n) {
+                  if (n.id === parseInt(noteId)) n.title = newTitle;
+                });
+              });
             }
           }).catch(function(err) {
             h3.textContent = current;
@@ -365,102 +367,84 @@
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function openFolderOverlay(folderId) {
+  var openedFromTile = null; // for the reverse (close) animation
+
+  function openFolderOverlay(folderId, tileEl) {
     var folder = FOLDERS_DATA.find(function(f) { return f.id === folderId; });
     if (!folder) return;
 
+    // Notes inside the expanded folder are real note pills: tap opens,
+    // long-press renames + shows the trash, handle-drag pulls them out
     var grid = document.getElementById('folder-overlay-grid');
     grid.innerHTML = folder.notes.map(function(n) {
-      return '<div class="overlay-note bg-white rounded-lg p-3 shadow cursor-pointer" data-note-id="' + n.id + '">' +
-        '<h4 class="font-semibold text-gray-800 truncate text-sm">' + escapeHtml(n.title || 'Untitled') + '</h4>' +
-        '<p class="text-xs text-gray-500 mt-1">' + new Date(n.updated_at).toLocaleDateString() + '</p>' +
+      return '<div class="note-card bg-white/70 rounded-xl border border-gray-200 p-4 relative group" data-note-id="' + n.id + '">' +
+        '<div class="note-drag-handle absolute top-3 left-3 cursor-grab text-gray-300" title="Drag out of folder">' +
+          '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">' +
+            '<circle cx="9" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>' +
+            '<circle cx="15" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="15" cy="18" r="2"/>' +
+          '</svg>' +
+        '</div>' +
+        '<a href="/note/' + n.id + '" class="block pl-6">' +
+          '<h3 class="font-semibold text-gray-800 truncate" style="font-family: \\'Space Grotesk\\', sans-serif; font-size: 1.1rem;">' + escapeHtml(n.title || 'Untitled') + '</h3>' +
+          '<p class="text-sm text-gray-500">' + new Date(n.updated_at).toLocaleDateString() + '</p>' +
+        '</a>' +
         '</div>';
     }).join('');
 
-    // Tap opens the note; drag (pointer-based - HTML5 DnD is unavailable
-    // in iOS web apps) past the panel edge pulls it out of the folder
-    grid.querySelectorAll('.overlay-note').forEach(function(el) {
-      var start = null;
-      var ghost = null;
-      var draggingOut = false;
-      var suppressNoteClick = false;
+    var overlay = document.getElementById('folder-overlay');
+    var panel = document.getElementById('folder-overlay-panel');
+    openedFromTile = tileEl || null;
+    overlay.classList.remove('hidden');
 
-      el.addEventListener('pointerdown', function(e) {
-        start = { x: e.clientX, y: e.clientY };
-        if (el.setPointerCapture) {
-          try { el.setPointerCapture(e.pointerId); } catch (err) {}
-        }
+    // Slide-and-expand from the tile's position (FLIP)
+    if (tileEl) {
+      var pr = panel.getBoundingClientRect();
+      var tr = tileEl.getBoundingClientRect();
+      var dx = (tr.left + tr.width / 2) - (pr.left + pr.width / 2);
+      var dy = (tr.top + tr.height / 2) - (pr.top + pr.height / 2);
+      panel.style.transition = 'none';
+      panel.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + (tr.width / pr.width) + ',' + (tr.height / pr.height) + ')';
+      panel.style.opacity = '0.5';
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          panel.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease';
+          panel.style.transform = 'none';
+          panel.style.opacity = '1';
+        });
       });
-
-      el.addEventListener('pointermove', function(e) {
-        if (!start) return;
-        if (!draggingOut && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) {
-          draggingOut = true;
-          var rect = el.getBoundingClientRect();
-          ghost = el.cloneNode(true);
-          ghost.classList.add('drag-ghost');
-          ghost.style.left = rect.left + 'px';
-          ghost.style.top = rect.top + 'px';
-          ghost.style.width = rect.width + 'px';
-          document.body.appendChild(ghost);
-          el.style.opacity = '0.4';
-        }
-        if (draggingOut && ghost) {
-          ghost.style.left = (e.clientX - 50) + 'px';
-          ghost.style.top = (e.clientY - 25) + 'px';
-        }
-      });
-
-      function finishDrag(e) {
-        if (!start) return;
-        var wasDragging = draggingOut;
-        start = null;
-        draggingOut = false;
-        if (ghost) { ghost.remove(); ghost = null; }
-        el.style.opacity = '1';
-
-        if (wasDragging) {
-          suppressNoteClick = true;
-          setTimeout(function() { suppressNoteClick = false; }, 300);
-          var panel = document.getElementById('folder-overlay-panel').getBoundingClientRect();
-          var outside = e.clientX < panel.left || e.clientX > panel.right ||
-                        e.clientY < panel.top || e.clientY > panel.bottom;
-          if (outside) {
-            moveNoteToFolder(el.dataset.noteId, null);
-          }
-        }
-      }
-
-      el.addEventListener('pointerup', finishDrag);
-      el.addEventListener('pointercancel', function() {
-        start = null;
-        draggingOut = false;
-        if (ghost) { ghost.remove(); ghost = null; }
-        el.style.opacity = '1';
-      });
-
-      el.addEventListener('click', function(e) {
-        if (suppressNoteClick) {
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        window.location.href = '/note/' + el.dataset.noteId;
-      });
-    });
-
-    document.getElementById('folder-overlay').classList.remove('hidden');
+    }
   }
 
   function closeFolderOverlay() {
-    document.getElementById('folder-overlay').classList.add('hidden');
+    var overlay = document.getElementById('folder-overlay');
+    var panel = document.getElementById('folder-overlay-panel');
+
+    // Shrink back into the tile it came from
+    if (openedFromTile && document.body.contains(openedFromTile)) {
+      var pr = panel.getBoundingClientRect();
+      var tr = openedFromTile.getBoundingClientRect();
+      var dx = (tr.left + tr.width / 2) - (pr.left + pr.width / 2);
+      var dy = (tr.top + tr.height / 2) - (pr.top + pr.height / 2);
+      panel.style.transition = 'transform 0.22s cubic-bezier(0.4, 0, 0.9, 0.6), opacity 0.18s ease';
+      panel.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + (tr.width / pr.width) + ',' + (tr.height / pr.height) + ')';
+      panel.style.opacity = '0.4';
+      setTimeout(function() {
+        overlay.classList.add('hidden');
+        panel.style.transition = 'none';
+        panel.style.transform = 'none';
+        panel.style.opacity = '1';
+      }, 220);
+    } else {
+      overlay.classList.add('hidden');
+    }
+    openedFromTile = null;
   }
 
-  // Tap a folder tile to open it
+  // Tap a folder tile to expand it
   document.addEventListener('click', function(e) {
     var tile = e.target.closest('.folder-tile');
     if (tile && !e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.note-drag-handle')) {
-      openFolderOverlay(parseInt(tile.dataset.folderId));
+      openFolderOverlay(parseInt(tile.dataset.folderId), tile);
     }
   });
 
@@ -641,6 +625,10 @@
       ghost: ghost,
       dx: e.clientX - rect.left,
       dy: e.clientY - rect.top,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      // Cards inside the expanded folder drag OUT of it, nothing else
+      fromOverlay: !!card.closest('#folder-overlay-panel'),
       moved: false
     };
   });
@@ -660,8 +648,12 @@
   document.addEventListener('pointermove', function(e) {
     if (!cardDrag) return;
     cardDrag.moved = true;
+    cardDrag.lastX = e.clientX;
+    cardDrag.lastY = e.clientY;
     cardDrag.ghost.style.left = (e.clientX - cardDrag.dx) + 'px';
     cardDrag.ghost.style.top = (e.clientY - cardDrag.dy) + 'px';
+
+    if (cardDrag.fromOverlay) return; // ghost only - drop decides pull-out
 
     var el = document.elementFromPoint(e.clientX, e.clientY);
     var target = el && el.closest('.note-card');
@@ -717,6 +709,18 @@
 
       var target = combineTarget;
       clearCombineTarget();
+
+      // Dragged out of the expanded folder: released past the panel edge
+      // removes the note from the folder
+      if (d.fromOverlay) {
+        var panel = document.getElementById('folder-overlay-panel').getBoundingClientRect();
+        var outside = d.lastX < panel.left || d.lastX > panel.right ||
+                      d.lastY < panel.top || d.lastY > panel.bottom;
+        if (d.moved && outside && d.card.dataset.noteId) {
+          moveNoteToFolder(d.card.dataset.noteId, null);
+        }
+        return;
+      }
 
       // Dropped centred on another card: combine (iOS folder behaviour)
       if (target && d.card.dataset.noteId) {
