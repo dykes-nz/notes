@@ -55,7 +55,10 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      padding: 16px;
+      /* The floating toolbar overlays the viewer (~48px tall): top and
+         bottom clearance keep the page edges reachable whichever
+         horizontal edge it is docked to */
+      padding: 64px 16px;
       min-height: 100%;
     }
 
