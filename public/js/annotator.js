@@ -412,7 +412,11 @@
       selection: false,
       allowTouchScrolling: false,
       enablePointerEvents: true,
-      enableRetinaScaling: !isIOSSafari
+      // renderScale already supersamples the backing store; letting
+      // fabric multiply by devicePixelRatio on top of that produces
+      // 30-megapixel canvases on high-DPI phones (S25 is dpr ~3) and
+      // the whole page grinds
+      enableRetinaScaling: false
     });
 
     // Base (100%) dimensions - the backing store is rescaled on zoom
@@ -520,7 +524,9 @@
           selection: false,
           allowTouchScrolling: false,
           enablePointerEvents: true,
-          enableRetinaScaling: !isIOSSafari
+          // See the ink canvas above: renderScale covers sharpness,
+          // retina scaling on top explodes memory on high-DPI phones
+          enableRetinaScaling: false
         });
 
         // Base (100%) dimensions - the backing store is rescaled on zoom
@@ -2272,8 +2278,6 @@
       // Apple Pencil detection: pointerType 'pen' OR touch with high pressure
       const isPen = e.pointerType === 'pen' || (e.pointerType === 'touch' && e.pressure > 0 && e.pressure !== 0.5);
 
-      console.log('Pointer down:', e.pointerType, 'pressure:', e.pressure, 'isPen:', isPen);
-
       if (isPen) {
         setStylusActive(true);
         if (stylusTimeout) {
@@ -2525,7 +2529,9 @@
   // near the viewport get their backing store re-rendered at the zoom
   // factor (capped) so ink stays crisp. Object coordinates are unchanged -
   // fabric's setZoom handles the mapping.
-  const MAX_RES_SCALE = isIOSSafari ? 2 : 3;
+  // High-DPI phones (dpr ~3) already pay renderScale x dpr in display
+  // cost - a 3x backing store on top exceeds Chrome's canvas limits
+  const MAX_RES_SCALE = (isIOSSafari || (window.devicePixelRatio || 1) > 2) ? 2 : 3;
   let resolutionTimer = null;
 
   function pageResScale(pageNum) {
