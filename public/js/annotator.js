@@ -39,11 +39,15 @@
   let currentShape = 'line';
   let shapeColor = '#000000';
   let eraserMode = savedToolSettings.eraserMode || 'eraser';
+  // Pen button draws either smooth ink ('pen') or textured graphite ('pencil')
+  let penMode = savedToolSettings.penMode || 'pen';
+  currentTool = penMode;
 
   function saveToolSettings() {
     try {
       localStorage.setItem('toolSettings', JSON.stringify({
-        strokeColor, strokeWidth, highlighterColor, highlighterWidth, eraserMode
+        strokeColor, strokeWidth, highlighterColor, highlighterWidth,
+        eraserMode, penMode
       }));
     } catch (e) {
       // Ignore storage errors
@@ -275,6 +279,74 @@
       const last = points[points.length - 1];
       path.push(['L', last.x, last.y]);
 
+      return path;
+    }
+  });
+
+  // ============= PENCIL (TEXTURED) BRUSH =============
+
+  // Repeating graphite-grain tiles, one per color. The tile is a canvas
+  // element: fabric.Pattern serialises it as a data URL, so pencil
+  // strokes survive save/reload without any custom restore logic.
+  const pencilTileCache = {};
+
+  function getPencilTile(color) {
+    if (pencilTileCache[color]) return pencilTileCache[color];
+
+    // Noise is generated at half size and upscaled 2x so grain cells stay
+    // ~1 screen pixel under renderScale instead of dissolving into
+    // sub-pixel dither
+    const grain = 32;
+    const noise = document.createElement('canvas');
+    noise.width = noise.height = grain;
+    const noiseCtx = noise.getContext('2d');
+
+    const rgb = new fabric.Color(color).getSource();
+    const img = noiseCtx.createImageData(grain, grain);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = rgb[0];
+      d[i + 1] = rgb[1];
+      d[i + 2] = rgb[2];
+      // Mostly mid-tone graphite, with lighter flecks where the paper
+      // tooth shows through
+      d[i + 3] = Math.random() < 0.2
+        ? 45 + Math.random() * 70
+        : 120 + Math.random() * 110;
+    }
+    noiseCtx.putImageData(img, 0, 0);
+
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = grain * 2;
+    const tileCtx = tile.getContext('2d');
+    tileCtx.imageSmoothingEnabled = false;
+    tileCtx.drawImage(noise, 0, 0, tile.width, tile.height);
+
+    pencilTileCache[color] = tile;
+    return tile;
+  }
+
+  // Same geometry as the pen, but stroked with the grain pattern - the
+  // finalised path gets a fabric.Pattern stroke (mirrors the stock
+  // fabric.PatternBrush)
+  fabric.PencilTextureBrush = fabric.util.createClass(fabric.SmoothPencilBrush, {
+    getPattern: function() {
+      return this.canvas.contextTop.createPattern(getPencilTile(this.color), 'repeat');
+    },
+
+    _setBrushStyles: function() {
+      this.callSuper('_setBrushStyles');
+      this.canvas.contextTop.strokeStyle = this.getPattern();
+    },
+
+    createPath: function(pathData) {
+      const path = this.callSuper('createPath', pathData);
+      const topLeft = path._getLeftTopCoords().scalarAdd(path.strokeWidth / 2);
+      path.stroke = new fabric.Pattern({
+        source: getPencilTile(this.color),
+        offsetX: -topLeft.x,
+        offsetY: -topLeft.y
+      });
       return path;
     }
   });
@@ -786,6 +858,9 @@
     if (tool === 'eraser') {
       tool = eraserMode;
     }
+    if (tool === 'pen') {
+      tool = penMode;
+    }
 
     // Exit insert-space mode if switching to another tool
     if (currentTool === 'insert-space' && tool !== 'insert-space') {
@@ -809,6 +884,7 @@
     document.querySelectorAll('.ftool-btn[data-tool]').forEach(btn => {
       const btnTool = btn.dataset.tool;
       const isActive = btnTool === tool ||
+        (btnTool === 'pen' && (tool === 'pen' || tool === 'pencil')) ||
         (btnTool === 'eraser' && (tool === 'eraser' || tool === 'eraser-precision')) ||
         (btnTool === 'shape' && tool === 'shape') ||
         (btnTool === 'insert-space' && tool === 'insert-space');
@@ -857,6 +933,15 @@
       case 'pen':
         canvas.isDrawingMode = true;
         canvas.freeDrawingBrush = new fabric.SmoothPencilBrush(canvas);
+        canvas.freeDrawingBrush.color = strokeColor;
+        canvas.freeDrawingBrush.width = strokeWidth;
+        canvas.defaultCursor = 'crosshair';
+        canvas.forEachObject(obj => { obj.selectable = false; });
+        break;
+
+      case 'pencil':
+        canvas.isDrawingMode = true;
+        canvas.freeDrawingBrush = new fabric.PencilTextureBrush(canvas);
         canvas.freeDrawingBrush.color = strokeColor;
         canvas.freeDrawingBrush.width = strokeWidth;
         canvas.defaultCursor = 'crosshair';
@@ -1067,6 +1152,10 @@
     });
     document.querySelectorAll('#pen-dropdown .width-option').forEach(o => {
       o.classList.toggle('active', parseFloat(o.dataset.width) === strokeWidth);
+    });
+
+    document.querySelectorAll('#pen-dropdown .eraser-mode').forEach(m => {
+      m.classList.toggle('active', m.dataset.mode === penMode);
     });
 
     document.querySelectorAll('#highlighter-dropdown .color-swatch').forEach(s => {
@@ -1592,7 +1681,7 @@
     });
 
     Object.values(fabricCanvases).forEach(canvas => {
-      if (canvas && canvas.freeDrawingBrush && currentTool === 'pen') {
+      if (canvas && canvas.freeDrawingBrush && (currentTool === 'pen' || currentTool === 'pencil')) {
         canvas.freeDrawingBrush.color = strokeColor;
       }
     });
@@ -1606,11 +1695,20 @@
     });
 
     Object.values(fabricCanvases).forEach(canvas => {
-      if (canvas && canvas.freeDrawingBrush && currentTool === 'pen') {
+      if (canvas && canvas.freeDrawingBrush && (currentTool === 'pen' || currentTool === 'pencil')) {
         canvas.freeDrawingBrush.width = strokeWidth;
       }
     });
     saveToolSettings();
+  };
+
+  window.setPenMode = function(mode) {
+    penMode = mode;
+    document.querySelectorAll('#pen-dropdown .eraser-mode').forEach(m => {
+      m.classList.toggle('active', m.dataset.mode === mode);
+    });
+    saveToolSettings();
+    setTool('pen');
   };
 
   window.setHighlighterColor = function(color) {
