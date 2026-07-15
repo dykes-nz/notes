@@ -364,6 +364,10 @@
     // Use A4 proportions (1:1.414) with a comfortable width
     inkPageWidth = Math.max(viewer.clientWidth - 32, 800) * renderScale;
     inkPageHeight = inkPageWidth * 1.414; // A4 aspect ratio
+    // Zoom 1.0 shows the full page width, matching PDF mode. Without
+    // this the page rendered at its backing-store size - on a phone
+    // that is ~4x the screen width, beyond what pinch-out could fix
+    fitScale = (viewer.clientWidth - 32) / inkPageWidth;
   }
 
   async function renderBlankCanvas() {
@@ -747,7 +751,9 @@
       localStorage.setItem(getScrollKey(), JSON.stringify({
         top: viewer.scrollTop,
         left: viewer.scrollLeft,
-        zoom: zoomLevel
+        zoom: zoomLevel,
+        // v2: ink-mode zoom is fit-width-relative (fitScale applied)
+        v: 2
       }));
     } catch (e) {
       // Ignore storage errors
@@ -760,8 +766,14 @@
       if (!saved) return;
 
       // Zoom must be restored first - scroll offsets depend on it
-      if (saved.zoom && Math.abs(saved.zoom - zoomLevel) > 0.01) {
-        zoomLevel = saved.zoom;
+      let savedZoom = saved.zoom;
+      if (savedZoom && MODE === 'ink' && saved.v !== 2 && fitScale > 0) {
+        // Saved before ink zoom became fit-relative: convert so the
+        // note appears at exactly the size it was left at
+        savedZoom = Math.min(savedZoom / fitScale, 3.0);
+      }
+      if (savedZoom && Math.abs(savedZoom - zoomLevel) > 0.01) {
+        zoomLevel = savedZoom;
         applyZoomToAllPages();
         updateZoomDisplay();
       }
@@ -2405,7 +2417,10 @@
         const scale = currentDistance / initialPinchDistance;
 
         let newZoom = initialZoomLevel * scale;
-        const maxZoom = isIOSSafari ? 2.0 : 3.0;
+        // Zoom is fit-width-relative; 3x fit matches the old on-screen
+        // maximum on iPad now that ink fitScale is applied (memory is
+        // governed by MAX_RES_SCALE, not the display zoom)
+        const maxZoom = 3.0;
         newZoom = Math.max(0.5, Math.min(maxZoom, newZoom));
 
         const zoomThreshold = isIOSSafari ? 0.03 : 0.01;
