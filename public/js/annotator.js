@@ -308,11 +308,13 @@
       d[i] = rgb[0];
       d[i + 1] = rgb[1];
       d[i + 2] = rgb[2];
-      // Mostly mid-tone graphite, with lighter flecks where the paper
-      // tooth shows through
-      d[i + 3] = Math.random() < 0.2
-        ? 45 + Math.random() * 70
-        : 120 + Math.random() * 110;
+      // Mostly mid-tone graphite, lighter flecks where the paper tooth
+      // shows through, and a few clear pinholes that keep the stroke
+      // edges slightly ragged
+      const v = Math.random();
+      d[i + 3] = v < 0.08 ? Math.random() * 30
+        : v < 0.28 ? 40 + Math.random() * 70
+          : 110 + Math.random() * 115;
     }
     noiseCtx.putImageData(img, 0, 0);
 
