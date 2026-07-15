@@ -204,6 +204,9 @@
 
     .toolbar-drag-handle {
       cursor: grab;
+      /* The handle owns its pointer gestures - without this Android
+         Chrome claims the touch for scrolling and dragging never starts */
+      touch-action: none;
       padding: 8px 6px;
       color: #9ca3af;
       display: flex;
@@ -578,6 +581,63 @@
     /* Side-docked save dropdown is positioned by positionDropdown(),
        tracking its button like the tool dropdowns */
 
+    /* Overflow menu: on phones the secondary tools collapse behind a
+       single "more" button so the toolbar fits the screen */
+    .toolbar-overflow-tools { display: contents; }
+    .overflow-menu-btn {
+      display: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: #6b7280;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+    }
+    .overflow-menu-btn:active { background: #e5e7eb; }
+    .overflow-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 8px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      padding: 8px;
+      display: none;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      width: 224px;
+      z-index: 1001;
+    }
+    .overflow-menu.show { display: flex; }
+    .overflow-menu .ftool-btn { width: 36px; height: 36px; }
+    .overflow-menu .ftool-btn svg { width: 18px; height: 18px; }
+    .overflow-menu .toolbar-divider { width: 100%; height: 1px; margin: 4px 0; }
+    .floating-toolbar.docked-bottom .overflow-menu {
+      top: auto;
+      bottom: 100%;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    .floating-toolbar.docked-left .overflow-menu {
+      left: calc(100% + 8px);
+      right: auto;
+      top: auto;
+      bottom: 0;
+      margin-top: 0;
+    }
+    .floating-toolbar.docked-right .overflow-menu {
+      right: calc(100% + 8px);
+      left: auto;
+      top: auto;
+      bottom: 0;
+      margin-top: 0;
+    }
+
     /* Mobile */
     @media (max-width: 768px) {
       .floating-toolbar {
@@ -590,6 +650,10 @@
       .ftool-btn { width: 30px; height: 30px; }
       .ftool-btn svg { width: 16px; height: 16px; }
       .toolbar-divider { height: 20px; margin: 0 3px; }
+
+      /* Secondary tools live in the overflow menu instead */
+      .toolbar-overflow-tools { display: none; }
+      .overflow-menu-btn { display: flex; }
     }
 
     /* Floating delete button for selections */
@@ -1352,6 +1416,8 @@
         </svg>
       </button>
 
+      <!-- Tools from here down move into the overflow menu on phones -->
+      <span class="toolbar-overflow-tools">
       <div class="toolbar-divider"></div>
 
       <!-- Zoom -->
@@ -1380,8 +1446,10 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h6v16H6a2 2 0 01-2-2V6zM12 4h6a2 2 0 012 2v12a2 2 0 01-2 2h-6M7 8h2M7 12h2M7 16h2"/>
         </svg>
       </button>
+      </span>
 
       <% if (mode === 'ink') { %>
+      <span class="toolbar-overflow-tools">
       <div class="toolbar-divider"></div>
 
       <!-- Add page (ink mode only) -->
@@ -1428,8 +1496,10 @@
           </div>
         </div>
       </div>
+      </span>
       <% } %>
 
+      <span class="toolbar-overflow-tools">
       <div class="toolbar-divider"></div>
 
       <!-- Audio recording -->
@@ -1438,6 +1508,76 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
         </svg>
       </button>
+      </span>
+
+      <!-- More tools: phone-only button holding everything wrapped in
+           toolbar-overflow-tools above -->
+      <button id="overflow-menu-btn" class="overflow-menu-btn" onclick="toggleOverflowMenu(event)" title="More tools">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+          <circle cx="12" cy="5" r="2"/>
+          <circle cx="12" cy="12" r="2"/>
+          <circle cx="12" cy="19" r="2"/>
+        </svg>
+      </button>
+      <div id="overflow-menu" class="overflow-menu">
+        <button onclick="zoomOut()" class="ftool-btn" title="Zoom out">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"/>
+          </svg>
+        </button>
+        <button onclick="zoomIn()" class="ftool-btn" title="Zoom in">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/>
+          </svg>
+        </button>
+        <button onclick="toggleFullscreen(); closeOverflowMenu();" class="ftool-btn" title="Full screen">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+          </svg>
+        </button>
+        <button onclick="toggleThumbPanel(); closeOverflowMenu();" class="ftool-btn" title="Page thumbnails">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h6v16H6a2 2 0 01-2-2V6zM12 4h6a2 2 0 012 2v12a2 2 0 01-2 2h-6M7 8h2M7 12h2M7 16h2"/>
+          </svg>
+        </button>
+        <% if (mode === 'ink') { %>
+        <div class="toolbar-divider"></div>
+        <button onclick="addInkPage(); closeOverflowMenu();" class="ftool-btn" title="Add Page">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+        </button>
+        <button onclick="setTool('insert-space')" class="ftool-btn" data-tool="insert-space" title="Insert Space (drag down to push content)">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16M12 8v8m-4-4l4 4 4-4"/>
+          </svg>
+        </button>
+        <div class="toolbar-divider"></div>
+        <div class="bg-options">
+          <div class="bg-option" data-bg="blank" onclick="setPageBackground('blank'); closeOverflowMenu();">
+            <div class="bg-preview"></div><span>Blank</span>
+          </div>
+          <div class="bg-option" data-bg="dots" onclick="setPageBackground('dots'); closeOverflowMenu();">
+            <div class="bg-preview bg-preview-dots"></div><span>Dots</span>
+          </div>
+          <div class="bg-option active" data-bg="lines-thin" onclick="setPageBackground('lines-thin'); closeOverflowMenu();">
+            <div class="bg-preview bg-preview-lines-thin"></div><span>Thin lines</span>
+          </div>
+          <div class="bg-option" data-bg="lines-wide" onclick="setPageBackground('lines-wide'); closeOverflowMenu();">
+            <div class="bg-preview bg-preview-lines-wide"></div><span>Wide lines</span>
+          </div>
+          <div class="bg-option" data-bg="grid" onclick="setPageBackground('grid'); closeOverflowMenu();">
+            <div class="bg-preview bg-preview-grid"></div><span>Grid</span>
+          </div>
+        </div>
+        <% } %>
+        <div class="toolbar-divider"></div>
+        <button onclick="toggleAudioPanel(); closeOverflowMenu();" class="ftool-btn" title="Record Audio">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+          </svg>
+        </button>
+      </div>
 
       <!-- Save dropdown -->
       <div class="tool-wrapper">

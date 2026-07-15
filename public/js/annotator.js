@@ -370,8 +370,8 @@
     pagesWrapper.innerHTML = '';
     calculateInkPageDimensions();
 
-    // Reflect restored background template in the dropdown
-    document.querySelectorAll('#bg-dropdown .bg-option').forEach(o => {
+    // Reflect restored background template in the dropdown and overflow menu
+    document.querySelectorAll('#bg-dropdown .bg-option, #overflow-menu .bg-option').forEach(o => {
       o.classList.toggle('active', o.dataset.bg === backgroundTemplate);
     });
 
@@ -1541,7 +1541,7 @@
   window.setPageBackground = function(template) {
     backgroundTemplate = template;
     Object.values(pageContainers).forEach(applyBackgroundToContainer);
-    document.querySelectorAll('#bg-dropdown .bg-option').forEach(o => {
+    document.querySelectorAll('#bg-dropdown .bg-option, #overflow-menu .bg-option').forEach(o => {
       o.classList.toggle('active', o.dataset.bg === template);
     });
     closeAllDropdowns();
@@ -1818,7 +1818,8 @@
     });
 
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.tool-wrapper')) {
+      if (!e.target.closest('.tool-wrapper') && !e.target.closest('.overflow-menu') &&
+          !e.target.closest('.overflow-menu-btn')) {
         closeAllDropdowns();
       }
     });
@@ -1872,7 +1873,26 @@
       d.classList.remove('open');
       d.style.cssText = '';
     });
+    closeOverflowMenu();
   }
+
+  // ============= OVERFLOW MENU (PHONES) =============
+
+  window.toggleOverflowMenu = function(event) {
+    event.stopPropagation();
+    const menu = document.getElementById('overflow-menu');
+    if (!menu) return;
+    const wasOpen = menu.classList.contains('show');
+    closeAllDropdowns();
+    if (!wasOpen) {
+      menu.classList.add('show');
+    }
+  };
+
+  window.closeOverflowMenu = function() {
+    const menu = document.getElementById('overflow-menu');
+    if (menu) menu.classList.remove('show');
+  };
 
   // ============= SHAPE DRAWING =============
 
@@ -2008,8 +2028,10 @@
     let isDragging = false;
     let startX, startY, initialX, initialY;
 
-    handle.addEventListener('mousedown', startDrag);
-    handle.addEventListener('touchstart', startDrag, { passive: false });
+    // Pointer events cover mouse, finger, and stylus (S Pen) with one
+    // code path; pointer capture keeps the gesture on the handle even
+    // when it leaves the element
+    handle.addEventListener('pointerdown', startDrag);
 
     function clearDockedClasses() {
       toolbar.classList.remove('docked-left', 'docked-right', 'docked-top', 'docked-bottom');
@@ -2019,13 +2041,8 @@
       isDragging = true;
       toolbar.style.transition = 'none';
 
-      if (e.type === 'touchstart') {
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-      } else {
-        startX = e.clientX;
-        startY = e.clientY;
-      }
+      startX = e.clientX;
+      startY = e.clientY;
 
       const rect = toolbar.getBoundingClientRect();
       initialX = rect.left;
@@ -2038,10 +2055,10 @@
       toolbar.style.right = 'auto';
       toolbar.style.bottom = 'auto';
 
-      document.addEventListener('mousemove', drag);
-      document.addEventListener('mouseup', stopDrag);
-      document.addEventListener('touchmove', drag, { passive: false });
-      document.addEventListener('touchend', stopDrag);
+      try { handle.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      handle.addEventListener('pointermove', drag);
+      handle.addEventListener('pointerup', stopDrag);
+      handle.addEventListener('pointercancel', stopDrag);
 
       e.preventDefault();
     }
@@ -2049,18 +2066,8 @@
     function drag(e) {
       if (!isDragging) return;
 
-      let clientX, clientY;
-      if (e.type === 'touchmove') {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-        e.preventDefault();
-      } else {
-        clientX = e.clientX;
-        clientY = e.clientY;
-      }
-
-      const dx = clientX - startX;
-      const dy = clientY - startY;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
 
       let newX = initialX + dx;
       let newY = initialY + dy;
@@ -2080,12 +2087,12 @@
       toolbar.style.bottom = 'auto';
     }
 
-    function stopDrag() {
+    function stopDrag(e) {
       isDragging = false;
-      document.removeEventListener('mousemove', drag);
-      document.removeEventListener('mouseup', stopDrag);
-      document.removeEventListener('touchmove', drag);
-      document.removeEventListener('touchend', stopDrag);
+      handle.removeEventListener('pointermove', drag);
+      handle.removeEventListener('pointerup', stopDrag);
+      handle.removeEventListener('pointercancel', stopDrag);
+      try { handle.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
 
       const rect = toolbar.getBoundingClientRect();
       const viewWidth = window.innerWidth;
