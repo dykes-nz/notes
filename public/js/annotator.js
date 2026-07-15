@@ -2244,12 +2244,24 @@
       stylusActive = active;
     }
 
-    // Track stylus on all page containers
+    // Track stylus on all page containers. S Pen and hover-capable
+    // Apple Pencils report hover moves (buttons 0) whenever the pen is
+    // near the screen: treat hover as "stylus present" with a rolling
+    // release timer, so palm rejection engages before the tip lands and
+    // - crucially - releases after the pen leaves. Merely clearing the
+    // timer here used to leave stylusActive stuck on after the lift-off
+    // hover, permanently blocking finger scrolling.
     pagesWrapper.addEventListener('pointermove', e => {
       if (e.pointerType === 'pen') {
         if (stylusTimeout) {
           clearTimeout(stylusTimeout);
           stylusTimeout = null;
+        }
+        if (e.buttons === 0) {
+          setStylusActive(true);
+          stylusTimeout = setTimeout(() => {
+            setStylusActive(false);
+          }, STYLUS_TIMEOUT_MS);
         }
       }
     }, { passive: true });
@@ -2304,20 +2316,24 @@
     }
 
     function handleTouchStart(e) {
+      // Stylus on or near the page: no new touch gesture may start. This
+      // also swallows the stylus's own compatibility touches - Android
+      // reports them as plain touches (touchType is iOS-only), and
+      // tracking one next to a resting palm used to read as a two-finger
+      // pinch that zoomed the page mid-stroke
+      if (stylusActive) {
+        e.preventDefault();
+        return;
+      }
+
       for (const touch of e.changedTouches) {
-        // Apple Pencil also fires touch events (touchType 'stylus') -
+        // Apple Pencil compatibility touches identify themselves on iOS -
         // only track finger touches here
         if (touch.touchType === 'stylus') continue;
         activeTouches.set(touch.identifier, touch);
       }
 
       if (activeTouches.size === 1) {
-        if (stylusActive) {
-          // Pen is on the page - a resting palm must not scroll or draw
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
         if (palmRejectionOn) {
           // Palm mode: one finger scrolls the page
           const t = Array.from(activeTouches.values())[0];
