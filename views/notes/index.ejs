@@ -95,6 +95,13 @@
   /* Home grid fades away while a folder is expanded (iOS behaviour) */
   #notes-grid { transition: opacity 0.25s ease; }
   #notes-grid.grid-faded { opacity: 0; pointer-events: none; }
+  /* Generous whitespace on iPad/desktop; on phones the fixed 200px
+     margins would squeeze the grid to a sliver and spill the card
+     content outside its border */
+  .home-grid-container { max-width: calc(100% - 400px); margin: 200px 200px 0; }
+  @media (max-width: 767px) {
+    .home-grid-container { max-width: none; margin: 96px 16px 0; }
+  }
   /* Floating copy of the card that follows the finger during a drag */
   .drag-ghost {
     position: fixed;
@@ -106,7 +113,7 @@
   }
 </style>
 
-<div class="mx-auto" style="max-width: calc(100% - 400px); margin: 200px 200px 0 200px;">
+<div class="mx-auto home-grid-container">
   <!-- Grid: folder tiles and loose notes share one ordering -->
   <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     ${gridItems.length === 0 ? `` : gridItems.map((item, index) => item.kind === 'folder' ? `
